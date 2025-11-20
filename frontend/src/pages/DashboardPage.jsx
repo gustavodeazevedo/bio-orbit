@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import presenceService from "../services/presenceService";
+import notificacaoService from "../services/notificacaoService";
 import { useIdleCallback } from "../hooks/useIdleCallback";
 import {
   Home,
@@ -33,6 +34,8 @@ const DashboardPage = () => {
   const [showActiveUsers, setShowActiveUsers] = useState(false);
   const [activeUsers, setActiveUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
 
   // Cores para avatares
   const avatarColors = [
@@ -122,19 +125,40 @@ const DashboardPage = () => {
     }
   }, [showActiveUsers]);
 
-  // Notificações de exemplo
-  const notifications = [
-    {
-      id: 1,
-      type: "info",
-      title: "Notificações Futuras",
-      message: "Por aqui será possível visualizar futuras notificações.",
-      date: "Há 2 horas",
-      read: false,
-    },
-  ];
+  // Carregar notificações
+  const loadNotifications = useCallback(async () => {
+    setLoadingNotifications(true);
+    try {
+      const data = await notificacaoService.getNotificacoes();
+      setNotifications(data);
+    } catch (error) {
+      console.error("Erro ao carregar notificações:", error);
+    } finally {
+      setLoadingNotifications(false);
+    }
+  }, []);
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  // Verificar vencimentos ao carregar o dashboard
+  useEffect(() => {
+    const verificarECarregar = async () => {
+      try {
+        await notificacaoService.verificarVencimentos();
+        await loadNotifications();
+      } catch (error) {
+        console.error("Erro ao verificar vencimentos:", error);
+      }
+    };
+    verificarECarregar();
+  }, [loadNotifications]);
+
+  // Recarregar notificações quando abrir o painel
+  useEffect(() => {
+    if (showNotifications) {
+      loadNotifications();
+    }
+  }, [showNotifications, loadNotifications]);
+
+  const unreadCount = notifications.filter((n) => !n.lida).length;
 
   const getNotificationIcon = (type) => {
     switch (type) {
@@ -142,9 +166,50 @@ const DashboardPage = () => {
         return <CheckCircle2 className="h-5 w-5 text-green-500" />;
       case "warning":
         return <AlertCircle className="h-5 w-5 text-yellow-500" />;
+      case "error":
+        return <AlertCircle className="h-5 w-5 text-red-500" />;
       default:
         return <Info className="h-5 w-5 text-blue-500" />;
     }
+  };
+
+  // Marcar notificação como lida
+  const handleMarkAsRead = useCallback(async (id) => {
+    try {
+      await notificacaoService.marcarComoLida(id);
+      setNotifications((prev) =>
+        prev.map((n) => (n._id === id ? { ...n, lida: true } : n))
+      );
+    } catch (error) {
+      console.error("Erro ao marcar notificação como lida:", error);
+    }
+  }, []);
+
+  // Marcar todas como lidas
+  const handleMarkAllAsRead = useCallback(async () => {
+    try {
+      await notificacaoService.marcarTodasComoLidas();
+      setNotifications((prev) => prev.map((n) => ({ ...n, lida: true })));
+    } catch (error) {
+      console.error("Erro ao marcar todas notificações como lidas:", error);
+    }
+  }, []);
+
+  // Formatar data relativa
+  const formatarDataRelativa = (data) => {
+    const agora = new Date();
+    const dataNotificacao = new Date(data);
+    const diffMs = agora - dataNotificacao;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHoras = Math.floor(diffMs / 3600000);
+    const diffDias = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return "Agora mesmo";
+    if (diffMins < 60) return `Há ${diffMins} minuto${diffMins > 1 ? "s" : ""}`;
+    if (diffHoras < 24)
+      return `Há ${diffHoras} hora${diffHoras > 1 ? "s" : ""}`;
+    if (diffDias < 7) return `Há ${diffDias} dia${diffDias > 1 ? "s" : ""}`;
+    return dataNotificacao.toLocaleDateString("pt-BR");
   };
 
   // Memoizar handleConfigClick
@@ -473,44 +538,63 @@ const DashboardPage = () => {
 
             {/* Lista de Notificações */}
             <div className="flex-1 overflow-y-auto">
-              {notifications.map((notification) => (
-                <div
-                  key={notification.id}
-                  className={`p-4 border-b border-border hover:bg-muted/50 transition-colors ${
-                    !notification.read ? "bg-primary/5" : ""
-                  }`}
-                >
-                  <div className="flex gap-3">
-                    <div className="flex-shrink-0 mt-1">
-                      {getNotificationIcon(notification.type)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2 mb-1">
-                        <h4 className="font-semibold text-foreground text-sm">
-                          {notification.title}
-                        </h4>
-                        {!notification.read && (
-                          <span className="h-2 w-2 bg-primary rounded-full flex-shrink-0 mt-1"></span>
-                        )}
+              {loadingNotifications ? (
+                <div className="p-8 text-center text-muted-foreground">
+                  Carregando notificações...
+                </div>
+              ) : notifications.length === 0 ? (
+                <div className="p-8 text-center text-muted-foreground">
+                  <Bell className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                  <p className="text-sm">Nenhuma notificação</p>
+                </div>
+              ) : (
+                notifications.map((notification) => (
+                  <div
+                    key={notification._id}
+                    className={`p-4 border-b border-border hover:bg-muted/50 transition-colors cursor-pointer ${
+                      !notification.lida ? "bg-primary/5" : ""
+                    }`}
+                    onClick={() =>
+                      !notification.lida && handleMarkAsRead(notification._id)
+                    }
+                  >
+                    <div className="flex gap-3">
+                      <div className="flex-shrink-0 mt-1">
+                        {getNotificationIcon(notification.tipo)}
                       </div>
-                      <p className="text-sm text-muted-foreground mb-2">
-                        {notification.message}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {notification.date}
-                      </p>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2 mb-1">
+                          <h4 className="font-semibold text-foreground text-sm">
+                            {notification.titulo}
+                          </h4>
+                          {!notification.lida && (
+                            <span className="h-2 w-2 bg-primary rounded-full flex-shrink-0 mt-1"></span>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground mb-2">
+                          {notification.mensagem}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatarDataRelativa(notification.createdAt)}
+                        </p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
 
             {/* Footer */}
-            <div className="p-4 border-t border-border">
-              <button className="w-full text-center text-sm text-primary hover:text-primary/80 font-medium transition-colors">
-                Marcar todas como lidas
-              </button>
-            </div>
+            {unreadCount > 0 && (
+              <div className="p-4 border-t border-border">
+                <button
+                  onClick={handleMarkAllAsRead}
+                  className="w-full text-center text-sm text-primary hover:text-primary/80 font-medium transition-colors"
+                >
+                  Marcar todas como lidas
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

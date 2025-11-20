@@ -115,6 +115,8 @@ app.use('/api/calibracoes', require('./routes/calibracoes'));
 app.use('/api/usuarios', require('./routes/usuarios'));
 app.use('/api/admin/token', require('./routes/token'));
 app.use('/api/clientes', require('./routes/clientes'));
+app.use('/api/configuracoes', require('./routes/configuracoes'));
+app.use('/api/notificacoes', require('./routes/notificacoes'));
 
 // Rota de health check
 app.get('/health', (req, res) => {

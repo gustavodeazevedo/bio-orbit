@@ -242,6 +242,7 @@ export class PDFService {    /**
                                 style: 'signatureSubtext',
                                 alignment: 'center'
                             }]),],
+                    unbreakable: true,
                     margin: (dadosCertificado.tipoInstrumento === 'monocanal' && dadosCertificado.tipoEquipamento !== 'repipetador') ?
                         // Para monocanais, margem menor já que aumentamos o espaço da página
                         pontosCalibra.length === 1 ? [0, 5, 0, 0] :
