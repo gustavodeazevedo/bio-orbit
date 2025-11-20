@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useParams, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import configuracaoService from "../services/configuracaoService";
 import {
   ArrowLeft,
   FileText,
@@ -56,6 +57,9 @@ const EmitirCertificadoPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
+
+  // Estado para padrões globais
+  const [padroesUtilizados, setPadroesUtilizados] = useState("");
 
   // Ref para controlar a navegação entre inputs
   const formRef = useRef(null);
@@ -183,6 +187,19 @@ const EmitirCertificadoPage = () => {
     29.5: 1.0052,
     "30.0": 1.0054,
   };
+
+  // Carregar configurações globais
+  useEffect(() => {
+    const loadConfiguracoes = async () => {
+      try {
+        const config = await configuracaoService.getConfiguracoes();
+        setPadroesUtilizados(config.padroesUtilizados || "");
+      } catch (error) {
+        console.error("Erro ao carregar configurações:", error);
+      }
+    };
+    loadConfiguracoes();
+  }, []);
 
   // Calcula o fator Z com base na temperatura
   useEffect(() => {
@@ -753,7 +770,7 @@ const EmitirCertificadoPage = () => {
         dadosParaPDF,
         fatorZ,
         seringasParaPDF,
-        user?.padroesUtilizados
+        padroesUtilizados
       );
 
       // Criar nome do arquivo
@@ -784,7 +801,7 @@ const EmitirCertificadoPage = () => {
         dadosParaPDF,
         fatorZ,
         seringasParaPDF,
-        user?.padroesUtilizados
+        padroesUtilizados
       );
 
       // Abrir o PDF em uma nova aba para visualização
