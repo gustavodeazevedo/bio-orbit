@@ -1,12 +1,14 @@
 import pdfMake from 'pdfmake/build/pdfmake';
-import pdfFonts from 'pdfmake/build/vfs_fonts';
+import * as pdfFonts from 'pdfmake/build/vfs_fonts';
 import { imageToBase64 } from '../utils/imageUtils';
 
-// Configurar as fontes corretamente
+// Configurar as fontes corretamente para compatibilidade ESM/CJS
 if (pdfFonts && pdfFonts.pdfMake && pdfFonts.pdfMake.vfs) {
     pdfMake.vfs = pdfFonts.pdfMake.vfs;
 } else if (pdfFonts && pdfFonts.vfs) {
     pdfMake.vfs = pdfFonts.vfs;
+} else if (pdfFonts.default && pdfFonts.default.pdfMake) {
+    pdfMake.vfs = pdfFonts.default.pdfMake.vfs;
 }
 
 // Configurar fontes usando as fontes padrão do sistema
@@ -43,8 +45,9 @@ export class PDFService {    /**
      * @param {Array} pontosCalibra - Pontos de calibração (ou seringas para repipetadores)
      * @param {number} fatorZ - Fator Z calculado
      * @param {Array} seringas - Dados das seringas (opcional, para repipetadores)
+     * @param {string} padroesUtilizados - Padrões utilizados configurados pelo usuário (opcional)
      */
-    static async gerarCertificadoCalibracao(dadosCertificado, cliente, pontosCalibra, fatorZ, seringas = null) {
+    static async gerarCertificadoCalibracao(dadosCertificado, cliente, pontosCalibra, fatorZ, seringas = null, padroesUtilizados = null) {
         // Validações básicas
         if (!dadosCertificado || !cliente || !fatorZ) {
             throw new Error('Dados insuficientes para gerar o certificado');
@@ -175,10 +178,7 @@ export class PDFService {    /**
                     style: 'sectionTitle',
                     margin: [0, 5, 0, 8]
                 }, {
-                    text: [
-                        'Termohigrômetro Digital HT600 Instrutherm, Certificado RBC Nº CAL – A 15694/25 , (Validade 08/2026).\n',
-                        'Balança Analítica Metter Toledo SAG250, Certificado RBC Nº CAL – A 15695/25, (Validade 08/2026).'
-                    ],
+                    text: padroesUtilizados || 'Termohigrômetro Digital HT600 Instrutherm, Certificado RBC Nº CAL – A 15694/25 , (Validade 08/2026).\nBalança Analítica Metter Toledo SAG250, Certificado RBC Nº CAL – A 15695/25, (Validade 08/2026).',
                     style: 'normalText',
                     margin: [0, 0, 0, 15]
                 },// 5. Parâmetros ambientais

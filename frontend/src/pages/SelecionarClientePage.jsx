@@ -122,7 +122,7 @@ const SelecionarClientePage = () => {
                   </td>
                   <td className="py-2 px-4 text-sm text-gray-900">
                     {cliente.endereco?.estado || "-"}
-                  </td>{" "}
+                  </td>
                   <td className="py-2 px-4 text-sm text-gray-900 text-center">
                     <div className="flex justify-center space-x-2">
                       <button
