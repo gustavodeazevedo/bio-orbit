@@ -38,7 +38,6 @@ const authUsuario = async (req, res) => {
                 setor: usuario.setor,
                 verificado: usuario.verificado,
                 isAdmin: usuario.isAdmin,
-                padroesUtilizados: usuario.padroesUtilizados,
                 token: generateToken(usuario._id)
             });
         } else {
@@ -109,8 +108,7 @@ const getUsuarioPerfil = async (req, res) => {
                 cargo: usuario.cargo,
                 setor: usuario.setor,
                 verificado: usuario.verificado,
-                isAdmin: usuario.isAdmin,
-                padroesUtilizados: usuario.padroesUtilizados
+                isAdmin: usuario.isAdmin
             });
         } else {
             res.status(404).json({ message: 'Usuário não encontrado' });
@@ -154,11 +152,6 @@ const updateUsuarioPerfil = async (req, res) => {
             usuario.cargo = req.body.cargo || usuario.cargo;
             usuario.setor = req.body.setor || usuario.setor;
 
-            // Atualizar padrões utilizados se fornecido
-            if (req.body.padroesUtilizados !== undefined) {
-                usuario.padroesUtilizados = req.body.padroesUtilizados;
-            }
-
             const updatedUsuario = await usuario.save();
 
             res.json({
@@ -169,7 +162,6 @@ const updateUsuarioPerfil = async (req, res) => {
                 setor: updatedUsuario.setor,
                 verificado: updatedUsuario.verificado,
                 isAdmin: updatedUsuario.isAdmin,
-                padroesUtilizados: updatedUsuario.padroesUtilizados,
                 token: generateToken(updatedUsuario._id)
             });
         } else {

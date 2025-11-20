@@ -41,10 +41,6 @@ const usuarioSchema = mongoose.Schema({
     ultimoHeartbeat: {
         type: Date,
         default: null
-    },
-    padroesUtilizados: {
-        type: String,
-        default: 'Termohigrômetro Digital HT600 Instrutherm, Certificado RBC Nº CAL – A 15694/25 , (Validade 08/2026).\nBalança Analítica Metter Toledo SAG250, Certificado RBC Nº CAL – A 15695/25, (Validade 08/2026).'
     }
 }, {
     timestamps: true
