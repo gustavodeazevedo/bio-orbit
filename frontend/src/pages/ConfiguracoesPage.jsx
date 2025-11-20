@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   Eye,
   EyeOff,
+  FileText,
 } from "lucide-react";
 
 // Constantes para cores (igual ao ClienteFormPage)
@@ -46,6 +47,7 @@ const ConfiguracoesPage = () => {
     email: "",
     cargo: "",
     setor: "",
+    padroesUtilizados: "",
     senhaAtual: "",
     novaSenha: "",
     confirmarSenha: "",
@@ -71,6 +73,7 @@ const ConfiguracoesPage = () => {
         email: user.email || "",
         cargo: user.cargo || "",
         setor: user.setor || "",
+        padroesUtilizados: user.padroesUtilizados || "",
         senhaAtual: "",
         novaSenha: "",
         confirmarSenha: "",
@@ -87,6 +90,7 @@ const ConfiguracoesPage = () => {
       formData.email !== user.email ||
       formData.cargo !== user.cargo ||
       formData.setor !== user.setor ||
+      formData.padroesUtilizados !== (user.padroesUtilizados || "") ||
       formData.senhaAtual !== "" ||
       formData.novaSenha !== "" ||
       formData.confirmarSenha !== "";
@@ -173,6 +177,7 @@ const ConfiguracoesPage = () => {
         email: formData.email,
         cargo: formData.cargo,
         setor: formData.setor,
+        padroesUtilizados: formData.padroesUtilizados,
       };
 
       // Adicionar senha se fornecida
@@ -493,6 +498,65 @@ const ConfiguracoesPage = () => {
                     <p className="text-red-500 text-xs mt-1">{errors.setor}</p>
                   )}
                 </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Seção: Padrões de Certificação */}
+          <div className="bg-card rounded-lg border border-border overflow-hidden">
+            <div className="bg-muted/30 px-6 py-4 border-b border-border">
+              <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                <FileText className="h-5 w-5 text-primary" />
+                Padrões de Certificação
+              </h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Configure os padrões utilizados nos certificados
+              </p>
+            </div>
+
+            <div className="p-6">
+              <div>
+                <label
+                  htmlFor="padroesUtilizados"
+                  className="block text-sm font-medium mb-1"
+                  style={{ color: COLORS.TEXT }}
+                >
+                  Padrões Utilizados
+                </label>
+                <p className="text-xs text-gray-500 mb-2">
+                  Este texto aparecerá na seção "Padrões Utilizados" dos
+                  certificados gerados. Inclua os equipamentos, números de
+                  certificados RBC e datas de validade.
+                </p>
+                <textarea
+                  id="padroesUtilizados"
+                  name="padroesUtilizados"
+                  value={formData.padroesUtilizados}
+                  onChange={handleInputChange}
+                  onFocus={(e) =>
+                    (e.target.style.borderColor = COLORS.BORDER_FOCUS)
+                  }
+                  onBlur={(e) =>
+                    (e.target.style.borderColor = errors.padroesUtilizados
+                      ? COLORS.BORDER_ERROR
+                      : "")
+                  }
+                  rows={4}
+                  className={inputClassName(errors.padroesUtilizados)}
+                  style={{
+                    borderColor: errors.padroesUtilizados
+                      ? COLORS.BORDER_ERROR
+                      : undefined,
+                    color: COLORS.TEXT,
+                    resize: "vertical",
+                    minHeight: "100px",
+                  }}
+                />
+                {errors.padroesUtilizados && (
+                  <p className="text-red-500 text-xs mt-1">
+                    {errors.padroesUtilizados}
+                  </p>
+                )}
               </div>
             </div>
           </div>
