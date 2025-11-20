@@ -29,6 +29,20 @@ export const AuthProvider = ({ children }) => {
     };
 
     loadUser();
+
+    // Listener para atualizar user quando o localStorage mudar
+    const handleStorageChange = () => {
+      const currentUser = authService.getCurrentUser();
+      setUser(currentUser);
+    };
+
+    // Listener customizado para atualizações dentro da mesma aba
+    window.addEventListener("userUpdated", handleStorageChange);
+
+    // Cleanup
+    return () => {
+      window.removeEventListener("userUpdated", handleStorageChange);
+    };
   }, []);
 
   // Função de login atualizada para incluir token corporativo
