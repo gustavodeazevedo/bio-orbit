@@ -86,10 +86,9 @@ export default defineConfig({
         include: [
             'react',
             'react-dom',
-            'react-router-dom'
-        ],
-        exclude: [
-            'pdfmake' // Lazy load PDF generator
+            'react-router-dom',
+            'pdfmake',
+            'pdfmake/build/vfs_fonts'
         ]
     }
 })
