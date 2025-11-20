@@ -24,6 +24,7 @@ const SelecionarClientePage = lazy(
 const EmitirCertificadoPage = lazy(
   () => import("./pages/EmitirCertificadoPage")
 );
+const ConfiguracoesPage = lazy(() => import("./pages/ConfiguracoesPage"));
 
 // Componente de loading
 const PageLoader = () => (
@@ -90,6 +91,9 @@ function App() {
             <Route element={<ProtectedRoute />}>
               {/* Dashboard - SEM wrapper */}
               <Route path="/dashboard" element={<DashboardPage />} />
+
+              {/* Configurações - SEM wrapper */}
+              <Route path="/configuracoes" element={<ConfiguracoesPage />} />
 
               {/* Rotas de clientes - com wrapper */}
               <Route

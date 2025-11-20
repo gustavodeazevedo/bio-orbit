@@ -149,9 +149,8 @@ const DashboardPage = () => {
 
   // Memoizar handleConfigClick
   const handleConfigClick = useCallback(() => {
-    setShowConfigToast(true);
-    setTimeout(() => setShowConfigToast(false), 4000);
-  }, []);
+    navigate("/configuracoes");
+  }, [navigate]);
 
   // Memoizar menuItems
   const menuItems = useMemo(

@@ -125,14 +125,31 @@ const updateUsuarioPerfil = async (req, res) => {
         const usuario = await Usuario.findById(req.usuario._id);
 
         if (usuario) {
+            // Se está tentando alterar a senha, verificar senha atual
+            if (req.body.novaSenha) {
+                if (!req.body.senhaAtual) {
+                    return res.status(400).json({
+                        message: 'Senha atual é obrigatória para alterar a senha'
+                    });
+                }
+
+                // Verificar se a senha atual está correta
+                const isMatch = await usuario.matchPassword(req.body.senhaAtual);
+                if (!isMatch) {
+                    return res.status(401).json({
+                        message: 'Senha atual incorreta'
+                    });
+                }
+
+                // Atualizar com a nova senha
+                usuario.senha = req.body.novaSenha;
+            }
+
+            // Atualizar outros campos
             usuario.nome = req.body.nome || usuario.nome;
             usuario.email = req.body.email || usuario.email;
             usuario.cargo = req.body.cargo || usuario.cargo;
             usuario.setor = req.body.setor || usuario.setor;
-
-            if (req.body.senha) {
-                usuario.senha = req.body.senha;
-            }
 
             const updatedUsuario = await usuario.save();
 
@@ -142,6 +159,7 @@ const updateUsuarioPerfil = async (req, res) => {
                 email: updatedUsuario.email,
                 cargo: updatedUsuario.cargo,
                 setor: updatedUsuario.setor,
+                verificado: updatedUsuario.verificado,
                 isAdmin: updatedUsuario.isAdmin,
                 token: generateToken(updatedUsuario._id)
             });

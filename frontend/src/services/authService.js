@@ -24,6 +24,19 @@ api.interceptors.request.use(
     }
 );
 
+// Interceptor de resposta para tratar erros 401
+api.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        if (error.response?.status === 401) {
+            // Token expirado ou inválido - limpar localStorage e redirecionar
+            localStorage.removeItem('userInfo');
+            window.location.href = '/login';
+        }
+        return Promise.reject(error);
+    }
+);
+
 // Serviço para autenticação de usuários
 const authService = {
     // Login de usuário com token corporativo
