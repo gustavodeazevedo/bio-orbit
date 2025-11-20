@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import authService, { api } from "../services/authService";
+import configuracaoService from "../services/configuracaoService";
 import {
   ArrowLeft,
   Save,
@@ -47,11 +48,14 @@ const ConfiguracoesPage = () => {
     email: "",
     cargo: "",
     setor: "",
-    padroesUtilizados: "",
     senhaAtual: "",
     novaSenha: "",
     confirmarSenha: "",
   });
+
+  // Estado separado para padrões (global)
+  const [padroesUtilizados, setPadroesUtilizados] = useState("");
+  const [padroesOriginais, setPadroesOriginais] = useState("");
 
   // Estados de controle
   const [hasChanges, setHasChanges] = useState(false);
@@ -65,20 +69,33 @@ const ConfiguracoesPage = () => {
   const [successMessage, setSuccessMessage] = useState("");
   const [showExitConfirm, setShowExitConfirm] = useState(false);
 
-  // Carregar dados do usuário
+  // Carregar dados do usuário e configurações globais
   useEffect(() => {
-    if (user) {
-      setFormData({
-        nome: user.nome || "",
-        email: user.email || "",
-        cargo: user.cargo || "",
-        setor: user.setor || "",
-        padroesUtilizados: user.padroesUtilizados || "",
-        senhaAtual: "",
-        novaSenha: "",
-        confirmarSenha: "",
-      });
-    }
+    const loadData = async () => {
+      // Carregar dados do usuário
+      if (user) {
+        setFormData({
+          nome: user.nome || "",
+          email: user.email || "",
+          cargo: user.cargo || "",
+          setor: user.setor || "",
+          senhaAtual: "",
+          novaSenha: "",
+          confirmarSenha: "",
+        });
+      }
+
+      // Carregar configurações globais (padrões)
+      try {
+        const config = await configuracaoService.getConfiguracoes();
+        setPadroesUtilizados(config.padroesUtilizados || "");
+        setPadroesOriginais(config.padroesUtilizados || "");
+      } catch (error) {
+        console.error("Erro ao carregar configurações:", error);
+      }
+    };
+
+    loadData();
   }, [user]);
 
   // Detectar mudanças no formulário
@@ -90,13 +107,13 @@ const ConfiguracoesPage = () => {
       formData.email !== user.email ||
       formData.cargo !== user.cargo ||
       formData.setor !== user.setor ||
-      formData.padroesUtilizados !== (user.padroesUtilizados || "") ||
+      padroesUtilizados !== padroesOriginais ||
       formData.senhaAtual !== "" ||
       formData.novaSenha !== "" ||
       formData.confirmarSenha !== "";
 
     setHasChanges(changed);
-  }, [formData, user]);
+  }, [formData, padroesUtilizados, padroesOriginais, user]);
 
   // Validar formulário
   const validateForm = () => {
@@ -171,54 +188,55 @@ const ConfiguracoesPage = () => {
     setSuccessMessage("");
 
     try {
-      // Preparar dados para envio
-      const updateData = {
-        nome: formData.nome,
-        email: formData.email,
-        cargo: formData.cargo,
-        setor: formData.setor,
-        padroesUtilizados: formData.padroesUtilizados,
-      };
+      // 1. Atualizar dados do usuário (se mudaram)
+      const userChanged =
+        formData.nome !== user.nome ||
+        formData.email !== user.email ||
+        formData.cargo !== user.cargo ||
+        formData.setor !== user.setor ||
+        formData.novaSenha;
 
-      // Adicionar senha se fornecida
-      if (formData.novaSenha) {
-        updateData.senhaAtual = formData.senhaAtual;
-        updateData.novaSenha = formData.novaSenha;
-      }
-
-      // Log dos dados sendo enviados para debug
-      console.log("📤 Dados sendo enviados para o backend:", updateData);
-
-      // Chamar API de atualização
-      const response = await api.put("/usuarios/perfil", updateData);
-
-      console.log("✅ Resposta recebida do backend:", response.data);
-
-      // Atualizar localStorage com as novas informações
-      if (response.data) {
-        const currentUser = authService.getCurrentUser();
-        const updatedUserData = {
-          ...response.data,
-          token: currentUser.token,
+      if (userChanged) {
+        const updateData = {
+          nome: formData.nome,
+          email: formData.email,
+          cargo: formData.cargo,
+          setor: formData.setor,
         };
-        localStorage.setItem("userInfo", JSON.stringify(updatedUserData));
 
-        console.log("💾 localStorage atualizado com:", updatedUserData);
+        // Adicionar senha se fornecida
+        if (formData.novaSenha) {
+          updateData.senhaAtual = formData.senhaAtual;
+          updateData.novaSenha = formData.novaSenha;
+        }
 
-        // Disparar evento customizado para atualizar o contexto
-        window.dispatchEvent(new Event("userUpdated"));
+        const response = await api.put("/usuarios/perfil", updateData);
 
-        // Atualizar formData com os dados salvos
-        setFormData({
-          nome: response.data.nome || "",
-          email: response.data.email || "",
-          cargo: response.data.cargo || "",
-          setor: response.data.setor || "",
-          senhaAtual: "",
-          novaSenha: "",
-          confirmarSenha: "",
-        });
+        // Atualizar localStorage
+        if (response.data) {
+          const currentUser = authService.getCurrentUser();
+          const updatedUserData = {
+            ...response.data,
+            token: currentUser.token,
+          };
+          localStorage.setItem("userInfo", JSON.stringify(updatedUserData));
+          window.dispatchEvent(new Event("userUpdated"));
+        }
       }
+
+      // 2. Atualizar padrões (global) se mudaram
+      if (padroesUtilizados !== padroesOriginais) {
+        await configuracaoService.updatePadroesUtilizados(padroesUtilizados);
+        setPadroesOriginais(padroesUtilizados);
+      }
+
+      // Limpar campos de senha
+      setFormData({
+        ...formData,
+        senhaAtual: "",
+        novaSenha: "",
+        confirmarSenha: "",
+      });
 
       setSuccessMessage("✅ Configurações salvas com sucesso!");
       setHasChanges(false);
@@ -226,7 +244,7 @@ const ConfiguracoesPage = () => {
       // Esconder mensagem após 8 segundos
       setTimeout(() => {
         setSuccessMessage("");
-      }, 4000);
+      }, 8000);
     } catch (error) {
       setErrors({
         submit:
@@ -531,8 +549,8 @@ const ConfiguracoesPage = () => {
                 <textarea
                   id="padroesUtilizados"
                   name="padroesUtilizados"
-                  value={formData.padroesUtilizados}
-                  onChange={handleInputChange}
+                  value={padroesUtilizados}
+                  onChange={(e) => setPadroesUtilizados(e.target.value)}
                   onFocus={(e) =>
                     (e.target.style.borderColor = COLORS.BORDER_FOCUS)
                   }
