@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useParams, useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext";
 import {
   ArrowLeft,
   FileText,
@@ -54,6 +55,7 @@ const EmitirCertificadoPage = () => {
   const { id } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   // Ref para controlar a navegação entre inputs
   const formRef = useRef(null);
@@ -750,7 +752,8 @@ const EmitirCertificadoPage = () => {
         cliente,
         dadosParaPDF,
         fatorZ,
-        seringasParaPDF
+        seringasParaPDF,
+        user?.padroesUtilizados
       );
 
       // Criar nome do arquivo
@@ -780,7 +783,8 @@ const EmitirCertificadoPage = () => {
         cliente,
         dadosParaPDF,
         fatorZ,
-        seringasParaPDF
+        seringasParaPDF,
+        user?.padroesUtilizados
       );
 
       // Abrir o PDF em uma nova aba para visualização
@@ -2573,8 +2577,8 @@ const EmitirCertificadoPage = () => {
                 {formData.tipoEquipamento === "micropipeta"
                   ? "da Micropipeta"
                   : formData.tipoEquipamento === "bureta"
-                  ? "da Bureta"
-                  : "do Repipetador"}
+                    ? "da Bureta"
+                    : "do Repipetador"}
               </h3>{" "}
               {/* Seletor de tipo de equipamento */}
               <RadioGroup
@@ -2606,8 +2610,8 @@ const EmitirCertificadoPage = () => {
                     formData.tipoEquipamento === "micropipeta"
                       ? "da Pipeta"
                       : formData.tipoEquipamento === "bureta"
-                      ? "da Bureta"
-                      : "do Repipetador"
+                        ? "da Bureta"
+                        : "do Repipetador"
                   }`}
                   name="marcaPipeta"
                   value={formData.marcaPipeta}
@@ -2631,8 +2635,8 @@ const EmitirCertificadoPage = () => {
                     formData.tipoEquipamento === "micropipeta"
                       ? "Ex: P1000, Research Plus, etc."
                       : formData.tipoEquipamento === "bureta"
-                      ? "Ex: B25, B50, Bureta Digital, etc."
-                      : "Ex: Multipette E3x, Repeater M4, etc."
+                        ? "Ex: B25, B50, Bureta Digital, etc."
+                        : "Ex: Multipette E3x, Repeater M4, etc."
                   }
                 />{" "}
                 <FormInput
@@ -2640,8 +2644,8 @@ const EmitirCertificadoPage = () => {
                     formData.tipoEquipamento === "micropipeta"
                       ? "da Pipeta"
                       : formData.tipoEquipamento === "bureta"
-                      ? "da Bureta"
-                      : "do Repipetador"
+                        ? "da Bureta"
+                        : "do Repipetador"
                   }`}
                   name="numeroPipeta"
                   value={formData.numeroPipeta}
