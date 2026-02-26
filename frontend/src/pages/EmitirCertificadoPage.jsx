@@ -468,14 +468,25 @@ const EmitirCertificadoPage = () => {
     }
   };
   // Função para reorganizar pontos para layout multicanal
-  const reorganizarPontosParaMulticanal = (canaisCustomizados = null) => {
+  const reorganizarPontosParaMulticanal = (
+    canaisCustomizados = null,
+    pontosPorCanalCustomizados = null
+  ) => {
     // Usar a quantidade de canais customizada ou a selecionada pelo usuário
     const novosCanais = canaisCustomizados || quantidadeCanais; // 8 ou 12 canais conforme seleção
-    console.log("🔄 Reorganizando pontos para", novosCanais, "canais");
+    const novosPontosPorCanal = pontosPorCanalCustomizados || pontosPorCanal;
+
+    console.log(
+      "🔄 Reorganizando pontos para",
+      novosCanais,
+      "canais e",
+      novosPontosPorCanal,
+      "pontos por canal"
+    );
     const novosPontos = [];
 
     for (let canal = 1; canal <= novosCanais; canal++) {
-      for (let ponto = 1; ponto <= pontosPorCanal; ponto++) {
+      for (let ponto = 1; ponto <= novosPontosPorCanal; ponto++) {
         novosPontos.push({
           id: Date.now() + canal * 100 + ponto,
           volumeNominal: "",
@@ -495,6 +506,9 @@ const EmitirCertificadoPage = () => {
 
     setPontosCalibra(novosPontos);
     setNumeroCanais(novosCanais);
+    if (pontosPorCanalCustomizados) {
+      setPontosPorCanal(pontosPorCanalCustomizados);
+    }
   };
 
   // Função para atualizar o número de pontos por canal
@@ -1092,10 +1106,26 @@ const EmitirCertificadoPage = () => {
       setNumeroCanais(extractedData.quantidadeCanais);
       setQuantidadeCanais(extractedData.quantidadeCanais); // Também atualizar a quantidade de canais disponível
 
+      // Determinar número de pontos por canal baseado nos dados extraídos
+      const numPontosExtraidos =
+        extractedData.pontosCalibra && extractedData.pontosCalibra.length > 0
+          ? extractedData.pontosCalibra.length
+          : 3;
+
+      console.log(
+        "🔧 IA detectou",
+        numPontosExtraidos,
+        "pontos de calibração por canal"
+      );
+
       // Aguardar um tick para garantir que o número de canais seja atualizado primeiro
       setTimeout(() => {
         // Reorganizar pontos para multicanal (cria estrutura para todos os canais)
-        reorganizarPontosParaMulticanal(extractedData.quantidadeCanais);
+        // Passamos explicitamente o número de pontos extraídos
+        reorganizarPontosParaMulticanal(
+          extractedData.quantidadeCanais,
+          numPontosExtraidos
+        );
 
         // Depois aplicar os dados do Canal Mestre extraídos pela IA
         setTimeout(() => {
