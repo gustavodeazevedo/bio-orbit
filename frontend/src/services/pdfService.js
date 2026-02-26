@@ -567,146 +567,195 @@ export class PDFService {    /**
 
     /**
      * Cria tabelas lado a lado específica para multicanais, respeitando a pontoPosicao
+     * Refatorado para usar sistema de colunas do PDFMake para melhor espaçamento e bordas independentes
      */
     static criarTabelasLadoALadoMulticanal(pontosCalibra) {
         if (!pontosCalibra || pontosCalibra.length === 0) {
             return [];
         }
 
-        const tabelas = [];
-        const PONTOS_POR_LINHA = 3; // Sempre 3 pontos por linha para manter consistência visual
+        const elementos = [];
+        // Determina o número de pontos por linha (4 se tiver 4 pontos, senão 3 para manter compatibilidade)
+        const PONTOS_POR_LINHA = pontosCalibra.length >= 4 ? 4 : 3;
 
-        // Configuração fixa que SEMPRE será usada, independente do número de pontos
-        const configFixa = {
-            widths: [85, 5, 50, 12, 85, 5, 50, 12, 85, 5, 50], // Sempre 11 colunas = 3 pontos
-            fontSize: 8,
-            padding: { left: 2, right: 2, top: 0, bottom: 0 }
-        };
+        // Configuração de estilo baseada no número de pontos
+        let config;
+
+        if (PONTOS_POR_LINHA === 4) {
+            // Configuração para 4 pontos (usando colunas independentes)
+            config = {
+                colWidth: 122, // Largura de cada tabela individual
+                gap: 8, // Espaço entre tabelas
+                tableWidths: [68, 3, 45], // Label, Sep, Value
+                fontSize: 7.5,
+                padding: { left: 1, right: 1, top: 1, bottom: 1 }
+            };
+        } else {
+            // Configuração padrão para 3 pontos
+            config = {
+                colWidth: 160,
+                gap: 10,
+                tableWidths: [85, 5, 50],
+                fontSize: 8,
+                padding: { left: 2, right: 2, top: 1, bottom: 1 }
+            };
+        }
 
         for (let i = 0; i < pontosCalibra.length; i += PONTOS_POR_LINHA) {
             const pontosOriginais = pontosCalibra.slice(i, i + PONTOS_POR_LINHA);
+            const colunasLinha = [];
 
-            // SEMPRE criar array com exatamente 3 elementos para manter estrutura idêntica
-            const pontosPadronizados = [
-                pontosOriginais[0] || null,
-                pontosOriginais[1] || null,
-                pontosOriginais[2] || null
-            ];
-
-            // Função para criar célula vazia com bordas invisíveis
-            const criarCelulaVazia = () => ({
-                text: '',
-                border: [false, false, false, false],
-                fontSize: configFixa.fontSize
-            });
-
-            // Função para criar coluna de ponto (sempre 3 células + separador se não for último)
-            const criarColunaPonto = (ponto, indice, isUltimo) => {
-                if (!ponto) {
-                    // Ponto vazio: 3 células vazias + separador se não for último
-                    const colunas = [criarCelulaVazia(), criarCelulaVazia(), criarCelulaVazia()];
-                    if (!isUltimo) {
-                        colunas.push(criarCelulaVazia()); // Separador
-                    }
-                    return colunas;
+            pontosOriginais.forEach((ponto, index) => {
+                // Adicionar espaçamento antes (exceto para o primeiro)
+                if (index > 0) {
+                    colunasLinha.push({ text: '', width: config.gap });
                 }
 
-                // Usar numeração sequencial baseada na posição global após ordenação
-                const numeroPonto = i + indice + 1;
+                // Número sequencial do ponto
+                const numeroPonto = i + index + 1;
+                const textoPonto = PONTOS_POR_LINHA === 4 ? `Ponto ${numeroPonto}` : `Ponto ${numeroPonto} de medição`;
 
-                const colunas = [
-                    { text: `Ponto ${numeroPonto} de medição`, style: 'staticTextTable', fontSize: configFixa.fontSize, bold: true },
-                    { text: ':', style: 'staticTextTable', alignment: 'center', fontSize: configFixa.fontSize },
-                    { text: `${ponto.volumeNominal}${ponto.unidade || 'µL'}`, style: 'dynamicText', fontSize: configFixa.fontSize, bold: true }
+                // Construir o corpo da tabela para este ponto
+                const body = [
+                    // Linha 1: Título e Volume
+                    [
+                        { text: textoPonto, style: 'staticTextTable', fontSize: config.fontSize, bold: true, border: [false, false, false, false] },
+                        { text: ':', style: 'staticTextTable', alignment: 'center', fontSize: config.fontSize, border: [false, false, false, false] },
+                        { text: `${ponto.volumeNominal}${ponto.unidade || 'µL'}`, style: 'dynamicText', fontSize: config.fontSize, bold: true, border: [false, false, false, false] }
+                    ],
+                    // Linha 2: Número de medições
+                    [
+                        { text: 'Número de medições', style: 'dynamicText', fontSize: config.fontSize, border: [false, false, false, false] },
+                        { text: ':', style: 'dynamicText', alignment: 'center', fontSize: config.fontSize, border: [false, false, false, false] },
+                        { text: '10', style: 'dynamicText', fontSize: config.fontSize, border: [false, false, false, false] }
+                    ],
+                    // Linha 3: Média
+                    [
+                        { text: 'Média', style: 'dynamicText', fontSize: config.fontSize, border: [false, false, false, false] },
+                        { text: ':', style: 'dynamicText', alignment: 'center', fontSize: config.fontSize, border: [false, false, false, false] },
+                        { text: `${ponto.media ? PDFService.formatarNumero(ponto.media) : '0,00'}${ponto.unidade || 'µL'}`, style: 'dynamicText', fontSize: config.fontSize, border: [false, false, false, false] }
+                    ],
+                    // Linha 4: Inexatidão
+                    [
+                        { text: 'Inexatidão / ISO8655', style: 'dynamicText', fontSize: config.fontSize, border: [false, false, false, false] },
+                        { text: ':', style: 'dynamicText', alignment: 'center', fontSize: config.fontSize, border: [false, false, false, false] },
+                        { text: `${ponto.inexatidao ? PDFService.formatarNumero(ponto.inexatidao) : '0,00'}${ponto.unidade || 'µL'}`, style: 'dynamicText', fontSize: config.fontSize, border: [false, false, false, false] }
+                    ],
+                    // Linha 5: Incerteza
+                    [
+                        { text: 'Incerteza / ISO8655', style: 'dynamicText', fontSize: config.fontSize, border: [false, false, false, false] },
+                        { text: ':', style: 'dynamicText', alignment: 'center', fontSize: config.fontSize, border: [false, false, false, false] },
+                        { text: `${ponto.desvioPadrao ? PDFService.formatarNumero(ponto.desvioPadrao) : '0,00'}${ponto.unidade || 'µL'}`, style: 'dynamicText', fontSize: config.fontSize, border: [false, false, false, false] }
+                    ]
                 ];
 
-                // Sempre adicionar separador se não for o último (índice 2)
-                if (!isUltimo) {
-                    colunas.push(criarCelulaVazia());
+                // Adicionar a tabela à coluna
+                colunasLinha.push({
+                    width: config.colWidth,
+                    table: {
+                        widths: config.tableWidths,
+                        body: body,
+                        dontBreakRows: true
+                    },
+                    layout: {
+                        hLineWidth: function (i, node) { return 0; }, // Sem linhas internas
+                        vLineWidth: function (i, node) { return 0; }, // Sem linhas internas
+                        paddingLeft: function (i) { return config.padding.left; },
+                        paddingRight: function (i) { return config.padding.right; },
+                        paddingTop: function (i) { return config.padding.top; },
+                        paddingBottom: function (i) { return config.padding.bottom; }
+                    },
+                    // Borda externa ao redor da tabela inteira
+                    canvas: [
+                        {
+                            type: 'rect',
+                            x: 0,
+                            y: 0,
+                            w: config.colWidth,
+                            h: 5 * (config.fontSize * 1.2 + config.padding.top + config.padding.bottom) + 10, // Altura estimada
+                            r: 0,
+                            lineColor: '#000000',
+                            lineWidth: 1
+                        }
+                    ]
+                });
+            });
+
+            // Adicionar colunas ao layout (mas espere, canvas desenha POR CIMA ou POR BAIXO? E é difícil calcular altura exata)
+            // Melhor usar uma tabela de uma célula com borda para conter a tabela interna sem bordas
+
+            const colunasLinhaComBorda = [];
+            pontosOriginais.forEach((ponto, index) => {
+                // Adicionar espaçamento antes (exceto para o primeiro)
+                if (index > 0) {
+                    colunasLinhaComBorda.push({ text: '', width: config.gap });
                 }
 
-                return colunas;
-            };
+                // Número sequencial do ponto
+                const numeroPonto = i + index + 1;
+                const textoPonto = PONTOS_POR_LINHA === 4 ? `Ponto ${numeroPonto}` : `Ponto ${numeroPonto} de medição`;
 
-            // Função para criar linha de dados (sempre 11 colunas)
-            const criarLinhaDados = (propriedade, label, unidadePadrao = '') => {
-                return pontosPadronizados.flatMap((ponto, idx) => {
-                    const isUltimo = idx === 2;
+                // Construir o corpo da tabela para este ponto
+                const body = [
+                    // Linha 1: Título e Volume
+                    [
+                        { text: textoPonto, style: 'staticTextTable', fontSize: config.fontSize, bold: true },
+                        { text: ':', style: 'staticTextTable', alignment: 'center', fontSize: config.fontSize },
+                        { text: `${ponto.volumeNominal}${ponto.unidade || 'µL'}`, style: 'dynamicText', fontSize: config.fontSize, bold: true }
+                    ],
+                    // Linha 2: Número de medições
+                    [
+                        { text: 'Número de medições', style: 'dynamicText', fontSize: config.fontSize, bold: false },
+                        { text: ':', style: 'dynamicText', alignment: 'center', fontSize: config.fontSize, bold: false },
+                        { text: '10', style: 'dynamicText', fontSize: config.fontSize, bold: false }
+                    ],
+                    // Linha 3: Média
+                    [
+                        { text: 'Média', style: 'dynamicText', fontSize: config.fontSize, bold: false },
+                        { text: ':', style: 'dynamicText', alignment: 'center', fontSize: config.fontSize, bold: false },
+                        { text: `${ponto.media ? PDFService.formatarNumero(ponto.media) : '0,00'}${ponto.unidade || 'µL'}`, style: 'dynamicText', fontSize: config.fontSize, bold: false }
+                    ],
+                    // Linha 4: Inexatidão
+                    [
+                        { text: 'Inexatidão / ISO8655', style: 'dynamicText', fontSize: config.fontSize, bold: false },
+                        { text: ':', style: 'dynamicText', alignment: 'center', fontSize: config.fontSize, bold: false },
+                        { text: `${ponto.inexatidao ? PDFService.formatarNumero(ponto.inexatidao) : '0,00'}${ponto.unidade || 'µL'}`, style: 'dynamicText', fontSize: config.fontSize, bold: false }
+                    ],
+                    // Linha 5: Incerteza
+                    [
+                        { text: 'Incerteza / ISO8655', style: 'dynamicText', fontSize: config.fontSize, bold: false },
+                        { text: ':', style: 'dynamicText', alignment: 'center', fontSize: config.fontSize, bold: false },
+                        { text: `${ponto.desvioPadrao ? PDFService.formatarNumero(ponto.desvioPadrao) : '0,00'}${ponto.unidade || 'µL'}`, style: 'dynamicText', fontSize: config.fontSize, bold: false }
+                    ]
+                ];
 
-                    if (!ponto) {
-                        return criarColunaPonto(null, idx, isUltimo);
-                    }
-
-                    let valor = '';
-                    if (propriedade === 'medicoes') {
-                        valor = '10'; // Número fixo de medições
-                    } else if (propriedade === 'media') {
-                        valor = `${ponto.media ? PDFService.formatarNumero(ponto.media) : '0,00'}${ponto.unidade || unidadePadrao}`;
-                    } else if (propriedade === 'inexatidao') {
-                        valor = `${ponto.inexatidao ? PDFService.formatarNumero(ponto.inexatidao) : '0,00'}${ponto.unidade || unidadePadrao}`;
-                    } else if (propriedade === 'desvioPadrao') {
-                        valor = `${ponto.desvioPadrao ? PDFService.formatarNumero(ponto.desvioPadrao) : '0,00'}${ponto.unidade || unidadePadrao}`;
-                    }
-
-                    const colunas = [
-                        { text: label, style: 'dynamicText', fontSize: configFixa.fontSize, bold: false },
-                        { text: ':', style: 'dynamicText', alignment: 'center', fontSize: configFixa.fontSize, bold: false },
-                        { text: valor, style: 'dynamicText', fontSize: configFixa.fontSize, bold: false }
-                    ];
-
-                    if (!isUltimo) {
-                        colunas.push(criarCelulaVazia());
-                    }
-
-                    return colunas;
-                });
-            };
-
-            // Criação das 5 linhas da tabela (SEMPRE 5 linhas x 11 colunas)
-            const linhas = [
-                // Linha 1: Títulos dos pontos
-                pontosPadronizados.flatMap((ponto, idx) => criarColunaPonto(ponto, idx, idx === 2)),
-
-                // Linha 2: Número de medições  
-                criarLinhaDados('medicoes', 'Número de medições'),
-
-                // Linha 3: Média
-                criarLinhaDados('media', 'Média', 'µL'),
-
-                // Linha 4: Inexatidão
-                criarLinhaDados('inexatidao', 'Inexatidão / ISO8655', 'µL'),
-
-                // Linha 5: Incerteza
-                criarLinhaDados('desvioPadrao', 'Incerteza / ISO8655', 'µL')
-            ];
-
-            // Criação da tabela com configuração SEMPRE idêntica
-            tabelas.push({
-                table: {
-                    headerRows: 0,
-                    widths: configFixa.widths, // SEMPRE as mesmas 11 larguras
-                    body: linhas, // SEMPRE 5 linhas x 11 colunas
-                    dontBreakRows: true
-                },
-                layout: {
-                    hLineWidth: (i, node) => (i === 0 || i === node.table.body.length) ? 1 : 0,
-                    vLineWidth: (i, node) => {
-                        // Layout SEMPRE para 3 pontos (posições fixas das bordas verticais)
-                        // [0:P1][1::][2:val] | [3:esp] | [4:P2][5::][6:val] | [7:esp] | [8:P3][9::][10:val]
-                        return (i === 0 || i === 3 || i === 4 || i === 7 || i === 8 || i === 11) ? 1 : 0;
+                colunasLinhaComBorda.push({
+                    width: config.colWidth,
+                    table: {
+                        widths: config.tableWidths,
+                        body: body,
+                        dontBreakRows: true
                     },
-                    hLineColor: '#000000',
-                    vLineColor: '#000000',
-                    paddingLeft: () => configFixa.padding.left,
-                    paddingRight: () => configFixa.padding.right,
-                    paddingTop: () => configFixa.padding.top,
-                    paddingBottom: () => configFixa.padding.bottom
-                },
-                margin: [0, 0, 0, 15]
+                    layout: {
+                        // Apenas borda externa
+                        hLineWidth: function (i, node) { return (i === 0 || i === node.table.body.length) ? 1 : 0; },
+                        vLineWidth: function (i, node) { return (i === 0 || i === node.table.widths.length) ? 1 : 0; },
+                        paddingLeft: function (i) { return config.padding.left; },
+                        paddingRight: function (i) { return config.padding.right; },
+                        paddingTop: function (i) { return config.padding.top; },
+                        paddingBottom: function (i) { return config.padding.bottom; }
+                    }
+                });
+            });
+
+            elementos.push({
+                columns: colunasLinhaComBorda,
+                columnGap: 0, // Controlado manualmente
+                margin: [0, 0, 0, 10]
             });
         }
 
-        return tabelas;
+        return elementos;
     }
 
     /**
