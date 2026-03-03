@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
-import authService, { api } from "../services/authService";
+import authService from "../services/authService";
 import configuracaoService from "../services/configuracaoService";
 import {
   ArrowLeft,
@@ -10,39 +10,23 @@ import {
   User,
   Mail,
   Lock,
-  Briefcase,
-  Building2,
-  AlertCircle,
-  CheckCircle2,
   Eye,
   EyeOff,
+  CheckCircle2,
+  AlertCircle,
   FileText,
+  Briefcase,
+  Building2,
+  Shield,
+  Bell,
 } from "lucide-react";
-
-// Constantes para cores (igual ao ClienteFormPage)
-const COLORS = {
-  TEXT: "rgb(75, 85, 99)",
-  BORDER_FOCUS: "rgb(144, 199, 45)",
-  BORDER_ERROR: "#ef4444",
-};
 
 const ConfiguracoesPage = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  // Classe de estilo para inputs (igual ao ClienteFormPage)
-  const inputClassName = (hasError) =>
-    `w-full px-3 py-2 border rounded-md transition-colors ${
-      hasError ? "border-red-500" : "border-gray-300"
-    } focus:outline-none`;
-
-  // Classe de estilo para inputs com ícone (senha)
-  const inputWithIconClassName = (hasError) =>
-    `w-full px-3 py-2 pr-10 border rounded-md transition-colors ${
-      hasError ? "border-red-500" : "border-gray-300"
-    } focus:outline-none`;
-
   // Estados do formulário
+  const [activeTab, setActiveTab] = useState("perfil");
   const [formData, setFormData] = useState({
     nome: "",
     email: "",
@@ -146,7 +130,7 @@ const ConfiguracoesPage = () => {
     // Validar senha se campos preenchidos
     if (formData.novaSenha || formData.confirmarSenha || formData.senhaAtual) {
       if (!formData.senhaAtual) {
-        newErrors.senhaAtual = "Senha atual é obrigatória para alterar senha";
+        newErrors.senhaAtual = "Senha atual é obrigatória";
       }
 
       if (
@@ -163,11 +147,7 @@ const ConfiguracoesPage = () => {
         (formData.novaSenha || formData.senhaAtual)
       ) {
         newErrors.confirmarSenha = "Confirme a nova senha";
-      } else if (
-        formData.novaSenha &&
-        formData.confirmarSenha &&
-        formData.novaSenha !== formData.confirmarSenha
-      ) {
+      } else if (formData.novaSenha !== formData.confirmarSenha) {
         newErrors.confirmarSenha = "As senhas não coincidem";
       }
     }
@@ -204,24 +184,12 @@ const ConfiguracoesPage = () => {
           setor: formData.setor,
         };
 
-        // Adicionar senha se fornecida
         if (formData.novaSenha) {
           updateData.senhaAtual = formData.senhaAtual;
           updateData.novaSenha = formData.novaSenha;
         }
 
-        const response = await api.put("/usuarios/perfil", updateData);
-
-        // Atualizar localStorage
-        if (response.data) {
-          const currentUser = authService.getCurrentUser();
-          const updatedUserData = {
-            ...response.data,
-            token: currentUser.token,
-          };
-          localStorage.setItem("userInfo", JSON.stringify(updatedUserData));
-          window.dispatchEvent(new Event("userUpdated"));
-        }
+        await authService.updateProfile(updateData);
       }
 
       // 2. Atualizar padrões (global) se mudaram
@@ -241,16 +209,15 @@ const ConfiguracoesPage = () => {
       setSuccessMessage("✅ Configurações salvas com sucesso!");
       setHasChanges(false);
 
-      // Esconder mensagem após 8 segundos
+      // Esconder mensagem após 5 segundos
       setTimeout(() => {
         setSuccessMessage("");
-      }, 8000);
+      }, 5000);
     } catch (error) {
       setErrors({
         submit:
           error.response?.data?.message ||
-          error.message ||
-          "Erro ao salvar configurações",
+          "Erro ao salvar configurações. Tente novamente.",
       });
     } finally {
       setLoading(false);
@@ -282,10 +249,11 @@ const ConfiguracoesPage = () => {
 
     // Limpar erro do campo
     if (errors[name]) {
-      setErrors((prev) => ({
-        ...prev,
-        [name]: "",
-      }));
+      setErrors((prev) => {
+        const newErrors = { ...prev };
+        delete newErrors[name];
+        return newErrors;
+      });
     }
   };
 
@@ -297,495 +265,571 @@ const ConfiguracoesPage = () => {
     }));
   };
 
+  const tabs = [
+    { id: "perfil", label: "Perfil", icon: User },
+    { id: "seguranca", label: "Segurança", icon: Lock },
+    { id: "certificados", label: "Certificados", icon: FileText },
+  ];
+
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="bg-card border-b border-border">
-        <div className="max-w-5xl mx-auto px-6 py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={handleCancel}
-                className="hover:bg-muted p-2 rounded-lg transition-colors"
-                title="Voltar"
-              >
-                <ArrowLeft className="h-5 w-5 text-foreground" />
-              </button>
-              <div>
-                <h1 className="text-2xl font-bold text-foreground">
-                  Configurações
-                </h1>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Gerencie suas informações pessoais e preferências
-                </p>
-              </div>
-            </div>
-
-            {hasChanges && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <div className="h-2 w-2 bg-yellow-500 rounded-full animate-pulse"></div>
-                <span>Alterações não salvas</span>
-              </div>
-            )}
-          </div>
+    <div className="flex h-screen bg-background overflow-hidden">
+      {/* Sidebar de Navegação */}
+      <aside className="w-64 h-screen bg-card border-r border-border flex flex-col">
+        {/* Header */}
+        <div className="h-20 px-6 flex items-center border-b border-border">
+          <button
+            onClick={handleCancel}
+            className="hover:bg-muted p-2 rounded-lg transition-colors -ml-2"
+            title="Voltar"
+          >
+            <ArrowLeft className="h-5 w-5 text-foreground" />
+          </button>
+          <h1 className="text-xl font-bold text-foreground ml-2">
+            Configurações
+          </h1>
         </div>
-      </header>
 
-      {/* Main Content */}
-      <main className="max-w-5xl mx-auto px-6 py-8">
-        <form onSubmit={handleSave} className="space-y-6">
-          {/* Mensagem de sucesso */}
-          {successMessage && (
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-start gap-3 animate-in slide-in-from-top duration-300">
-              <CheckCircle2 className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="text-sm font-medium text-green-900">
-                  {successMessage}
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* Erro de submissão */}
-          {errors.submit && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
-              <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="text-sm font-medium text-red-900">
-                  {errors.submit}
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* Seção: Informações Pessoais */}
-          <div className="bg-card rounded-lg border border-border overflow-hidden">
-            <div className="bg-muted/30 px-6 py-4 border-b border-border">
-              <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
-                <User className="h-5 w-5 text-primary" />
-                Informações Pessoais
-              </h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                Atualize seus dados básicos
-              </p>
-            </div>
-
-            <div className="p-6 space-y-4">
-              {/* Nome */}
-              <div>
-                <label
-                  htmlFor="nome"
-                  className="block text-sm font-medium mb-1"
-                  style={{ color: COLORS.TEXT }}
-                >
-                  Nome Completo
-                </label>
-                <input
-                  type="text"
-                  id="nome"
-                  name="nome"
-                  value={formData.nome}
-                  onChange={handleInputChange}
-                  onFocus={(e) =>
-                    (e.target.style.borderColor = COLORS.BORDER_FOCUS)
-                  }
-                  onBlur={(e) =>
-                    (e.target.style.borderColor = errors.nome
-                      ? COLORS.BORDER_ERROR
-                      : "")
-                  }
-                  className={inputClassName(errors.nome)}
-                  placeholder="Seu nome completo"
-                  style={{
-                    borderColor: errors.nome ? COLORS.BORDER_ERROR : undefined,
-                    color: COLORS.TEXT,
-                  }}
-                />
-                {errors.nome && (
-                  <p className="text-red-500 text-xs mt-1">{errors.nome}</p>
-                )}
-              </div>
-
-              {/* Email */}
-              <div>
-                <label
-                  htmlFor="email"
-                  className="block text-sm font-medium mb-1"
-                  style={{ color: COLORS.TEXT }}
-                >
-                  Email
-                </label>
-                <input
-                  type="email"
-                  id="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleInputChange}
-                  onFocus={(e) =>
-                    (e.target.style.borderColor = COLORS.BORDER_FOCUS)
-                  }
-                  onBlur={(e) =>
-                    (e.target.style.borderColor = errors.email
-                      ? COLORS.BORDER_ERROR
-                      : "")
-                  }
-                  className={inputClassName(errors.email)}
-                  placeholder="seu@email.com"
-                  style={{
-                    borderColor: errors.email ? COLORS.BORDER_ERROR : undefined,
-                    color: COLORS.TEXT,
-                  }}
-                />
-                {errors.email && (
-                  <p className="text-red-500 text-xs mt-1">{errors.email}</p>
-                )}
-              </div>
-
-              {/* Cargo e Setor */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Cargo */}
-                <div>
-                  <label
-                    htmlFor="cargo"
-                    className="block text-sm font-medium mb-1"
-                    style={{ color: COLORS.TEXT }}
-                  >
-                    Cargo
-                  </label>
-                  <input
-                    type="text"
-                    id="cargo"
-                    name="cargo"
-                    value={formData.cargo}
-                    onChange={handleInputChange}
-                    onFocus={(e) =>
-                      (e.target.style.borderColor = COLORS.BORDER_FOCUS)
-                    }
-                    onBlur={(e) =>
-                      (e.target.style.borderColor = errors.cargo
-                        ? COLORS.BORDER_ERROR
-                        : "")
-                    }
-                    className={inputClassName(errors.cargo)}
-                    placeholder="Seu cargo"
-                    style={{
-                      borderColor: errors.cargo
-                        ? COLORS.BORDER_ERROR
-                        : undefined,
-                      color: COLORS.TEXT,
-                    }}
-                  />
-                  {errors.cargo && (
-                    <p className="text-red-500 text-xs mt-1">{errors.cargo}</p>
-                  )}
-                </div>
-
-                {/* Setor */}
-                <div>
-                  <label
-                    htmlFor="setor"
-                    className="block text-sm font-medium mb-1"
-                    style={{ color: COLORS.TEXT }}
-                  >
-                    Setor
-                  </label>
-                  <input
-                    type="text"
-                    id="setor"
-                    name="setor"
-                    value={formData.setor}
-                    onChange={handleInputChange}
-                    onFocus={(e) =>
-                      (e.target.style.borderColor = COLORS.BORDER_FOCUS)
-                    }
-                    onBlur={(e) =>
-                      (e.target.style.borderColor = errors.setor
-                        ? COLORS.BORDER_ERROR
-                        : "")
-                    }
-                    className={inputClassName(errors.setor)}
-                    placeholder="Seu setor"
-                    style={{
-                      borderColor: errors.setor
-                        ? COLORS.BORDER_ERROR
-                        : undefined,
-                      color: COLORS.TEXT,
-                    }}
-                  />
-                  {errors.setor && (
-                    <p className="text-red-500 text-xs mt-1">{errors.setor}</p>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Seção: Padrões de Certificação */}
-          <div className="bg-card rounded-lg border border-border overflow-hidden">
-            <div className="bg-muted/30 px-6 py-4 border-b border-border">
-              <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
-                <FileText className="h-5 w-5 text-primary" />
-                Padrões de Certificação
-              </h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                Configure os padrões utilizados nos certificados
-              </p>
-            </div>
-
-            <div className="p-6">
-              <div>
-                <label
-                  htmlFor="padroesUtilizados"
-                  className="block text-sm font-medium mb-1"
-                  style={{ color: COLORS.TEXT }}
-                >
-                  Padrões Utilizados
-                </label>
-                <p className="text-xs text-gray-500 mb-2">
-                  Este texto aparecerá na seção "Padrões Utilizados" dos
-                  certificados gerados. Inclua os equipamentos, números de
-                  certificados RBC e datas de validade.
-                </p>
-                <textarea
-                  id="padroesUtilizados"
-                  name="padroesUtilizados"
-                  value={padroesUtilizados}
-                  onChange={(e) => setPadroesUtilizados(e.target.value)}
-                  onFocus={(e) =>
-                    (e.target.style.borderColor = COLORS.BORDER_FOCUS)
-                  }
-                  onBlur={(e) =>
-                    (e.target.style.borderColor = errors.padroesUtilizados
-                      ? COLORS.BORDER_ERROR
-                      : "")
-                  }
-                  rows={4}
-                  className={inputClassName(errors.padroesUtilizados)}
-                  style={{
-                    borderColor: errors.padroesUtilizados
-                      ? COLORS.BORDER_ERROR
-                      : undefined,
-                    color: COLORS.TEXT,
-                    resize: "vertical",
-                    minHeight: "100px",
-                  }}
-                />
-                {errors.padroesUtilizados && (
-                  <p className="text-red-500 text-xs mt-1">
-                    {errors.padroesUtilizados}
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Seção: Segurança */}
-          <div className="bg-card rounded-lg border border-border overflow-hidden">
-            <div className="bg-muted/30 px-6 py-4 border-b border-border">
-              <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
-                <Lock className="h-5 w-5 text-primary" />
-                Segurança
-              </h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                Altere sua senha (opcional)
-              </p>
-            </div>
-
-            <div className="p-6 space-y-4">
-              {/* Senha Atual */}
-              <div>
-                <label
-                  htmlFor="senhaAtual"
-                  className="block text-sm font-medium mb-1"
-                  style={{ color: COLORS.TEXT }}
-                >
-                  Senha Atual
-                </label>
-                <div className="relative">
-                  <input
-                    type={showPassword.atual ? "text" : "password"}
-                    id="senhaAtual"
-                    name="senhaAtual"
-                    value={formData.senhaAtual}
-                    onChange={handleInputChange}
-                    onFocus={(e) =>
-                      (e.target.style.borderColor = COLORS.BORDER_FOCUS)
-                    }
-                    onBlur={(e) =>
-                      (e.target.style.borderColor = errors.senhaAtual
-                        ? COLORS.BORDER_ERROR
-                        : "")
-                    }
-                    className={inputWithIconClassName(errors.senhaAtual)}
-                    placeholder="Digite sua senha atual"
-                    autoComplete="new-password"
-                    style={{
-                      borderColor: errors.senhaAtual
-                        ? COLORS.BORDER_ERROR
-                        : undefined,
-                      color: COLORS.TEXT,
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => togglePasswordVisibility("atual")}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-                  >
-                    {showPassword.atual ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </button>
-                </div>
-                {errors.senhaAtual && (
-                  <p className="text-red-500 text-xs mt-1">
-                    {errors.senhaAtual}
-                  </p>
-                )}
-              </div>
-
-              {/* Nova Senha e Confirmar */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Nova Senha */}
-                <div>
-                  <label
-                    htmlFor="novaSenha"
-                    className="block text-sm font-medium mb-1"
-                    style={{ color: COLORS.TEXT }}
-                  >
-                    Nova Senha
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showPassword.nova ? "text" : "password"}
-                      id="novaSenha"
-                      name="novaSenha"
-                      value={formData.novaSenha}
-                      onChange={handleInputChange}
-                      onFocus={(e) =>
-                        (e.target.style.borderColor = COLORS.BORDER_FOCUS)
-                      }
-                      onBlur={(e) =>
-                        (e.target.style.borderColor = errors.novaSenha
-                          ? COLORS.BORDER_ERROR
-                          : "")
-                      }
-                      className={inputWithIconClassName(errors.novaSenha)}
-                      placeholder="Mínimo 6 caracteres"
-                      autoComplete="new-password"
-                      style={{
-                        borderColor: errors.novaSenha
-                          ? COLORS.BORDER_ERROR
-                          : undefined,
-                        color: COLORS.TEXT,
-                      }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => togglePasswordVisibility("nova")}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-                    >
-                      {showPassword.nova ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                    </button>
-                  </div>
-                  {errors.novaSenha && (
-                    <p className="text-red-500 text-xs mt-1">
-                      {errors.novaSenha}
-                    </p>
-                  )}
-                </div>
-
-                {/* Confirmar Senha */}
-                <div>
-                  <label
-                    htmlFor="confirmarSenha"
-                    className="block text-sm font-medium mb-1"
-                    style={{ color: COLORS.TEXT }}
-                  >
-                    Confirmar Nova Senha
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showPassword.confirmar ? "text" : "password"}
-                      id="confirmarSenha"
-                      name="confirmarSenha"
-                      value={formData.confirmarSenha}
-                      onChange={handleInputChange}
-                      onFocus={(e) =>
-                        (e.target.style.borderColor = COLORS.BORDER_FOCUS)
-                      }
-                      onBlur={(e) =>
-                        (e.target.style.borderColor = errors.confirmarSenha
-                          ? COLORS.BORDER_ERROR
-                          : "")
-                      }
-                      className={inputWithIconClassName(errors.confirmarSenha)}
-                      placeholder="Repita a nova senha"
-                      autoComplete="new-password"
-                      style={{
-                        borderColor: errors.confirmarSenha
-                          ? COLORS.BORDER_ERROR
-                          : undefined,
-                        color: COLORS.TEXT,
-                      }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => togglePasswordVisibility("confirmar")}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-                    >
-                      {showPassword.confirmar ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                    </button>
-                  </div>
-                  {errors.confirmarSenha && (
-                    <p className="text-red-500 text-xs mt-1">
-                      {errors.confirmarSenha}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Ações */}
-          <div className="flex items-center justify-end gap-3 pt-4">
+        {/* Tabs de Navegação */}
+        <nav className="flex-1 p-4 space-y-2">
+          {tabs.map((tab) => (
             <button
-              type="button"
-              onClick={handleCancel}
-              className="px-6 py-2 border border-border rounded-lg hover:bg-muted transition-colors text-foreground font-medium"
-            >
-              <span className="flex items-center gap-2">
-                <X className="h-4 w-4" />
-                Cancelar
-              </span>
-            </button>
-
-            <button
-              type="submit"
-              disabled={!hasChanges || loading}
-              className={`px-6 py-2 rounded-lg font-medium transition-all ${
-                hasChanges && !loading
-                  ? "bg-primary hover:bg-primary/90 text-primary-foreground shadow-md hover:shadow-lg"
-                  : "bg-gray-300 text-gray-500 cursor-not-allowed"
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${
+                activeTab === tab.id
+                  ? "bg-primary text-primary-foreground shadow-md"
+                  : "hover:bg-muted text-muted-foreground hover:text-foreground"
               }`}
             >
-              <span className="flex items-center gap-2">
-                <Save className="h-4 w-4" />
-                {loading ? "Salvando..." : "Salvar Alterações"}
-              </span>
+              <tab.icon className="h-5 w-5" />
+              <span className="font-medium">{tab.label}</span>
             </button>
+          ))}
+        </nav>
+
+        {/* Status de Alterações */}
+        {hasChanges && (
+          <div className="p-4 border-t border-border">
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex items-center gap-2">
+              <div className="h-2 w-2 bg-yellow-500 rounded-full animate-pulse"></div>
+              <span className="text-xs font-medium text-yellow-800">
+                Alterações não salvas
+              </span>
+            </div>
           </div>
-        </form>
-      </main>
+        )}
+      </aside>
+
+      {/* Conteúdo Principal */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Header */}
+        <header className="h-20 bg-card border-b border-border px-8 flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-semibold text-foreground">
+              {tabs.find((t) => t.id === activeTab)?.label}
+            </h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              {activeTab === "perfil" &&
+                "Gerencie suas informações pessoais e profissionais"}
+              {activeTab === "seguranca" &&
+                "Altere sua senha e configure a segurança da conta"}
+              {activeTab === "certificados" &&
+                "Configure padrões globais para emissão de certificados"}
+            </p>
+          </div>
+
+          {hasChanges && (
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleCancel}
+                className="px-4 py-2 border border-border rounded-lg hover:bg-muted transition-colors text-foreground font-medium"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={loading}
+                className="px-6 py-2 bg-primary hover:bg-primary/90 text-primary-foreground font-medium shadow-sm hover:shadow-md transition-all duration-200 rounded-lg flex items-center gap-2"
+              >
+                <Save className="h-4 w-4" />
+                {loading ? "Salvando..." : "Salvar"}
+              </button>
+            </div>
+          )}
+        </header>
+
+        {/* Main Content */}
+        <main className="flex-1 overflow-y-auto">
+          <div className="max-w-4xl mx-auto p-8 space-y-6">
+            {/* Mensagem de sucesso */}
+            {successMessage && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-start gap-3 animate-in slide-in-from-top duration-300">
+                <CheckCircle2 className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-green-900">
+                    {successMessage}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setSuccessMessage("")}
+                  className="hover:bg-green-100 p-1 rounded transition-colors"
+                >
+                  <X className="h-4 w-4 text-green-600" />
+                </button>
+              </div>
+            )}
+
+            {/* Erro de submissão */}
+            {errors.submit && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-red-900">
+                    {errors.submit}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setErrors({ ...errors, submit: undefined })}
+                  className="hover:bg-red-100 p-1 rounded transition-colors"
+                >
+                  <X className="h-4 w-4 text-red-600" />
+                </button>
+              </div>
+            )}
+
+            {/* Tab: Perfil */}
+            {activeTab === "perfil" && (
+              <form onSubmit={handleSave} className="space-y-6">
+                {/* Card de Informações do Usuário */}
+                <div className="bg-card rounded-xl border border-border p-6">
+                  <div className="flex items-center gap-4 mb-6">
+                    <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
+                      <User className="h-8 w-8 text-primary" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-foreground">
+                        Informações Pessoais
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        Atualize seus dados básicos
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    {/* Nome */}
+                    <div>
+                      <label
+                        htmlFor="nome"
+                        className="block text-sm font-medium text-foreground mb-2"
+                      >
+                        Nome Completo
+                      </label>
+                      <input
+                        type="text"
+                        id="nome"
+                        name="nome"
+                        value={formData.nome}
+                        onChange={handleInputChange}
+                        className={`w-full px-4 py-2.5 border rounded-lg transition-colors bg-background ${
+                          errors.nome
+                            ? "border-red-500 focus:border-red-500"
+                            : "border-border focus:border-primary"
+                        } focus:outline-none focus:ring-2 focus:ring-primary/20`}
+                        placeholder="Seu nome completo"
+                      />
+                      {errors.nome && (
+                        <p className="text-red-500 text-xs mt-1.5 flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3" />
+                          {errors.nome}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Email */}
+                    <div>
+                      <label
+                        htmlFor="email"
+                        className="block text-sm font-medium text-foreground mb-2"
+                      >
+                        Email
+                      </label>
+                      <input
+                        type="email"
+                        id="email"
+                        name="email"
+                        value={formData.email}
+                        onChange={handleInputChange}
+                        className={`w-full px-4 py-2.5 border rounded-lg transition-colors bg-background ${
+                          errors.email
+                            ? "border-red-500 focus:border-red-500"
+                            : "border-border focus:border-primary"
+                        } focus:outline-none focus:ring-2 focus:ring-primary/20`}
+                        placeholder="seu@email.com"
+                      />
+                      {errors.email && (
+                        <p className="text-red-500 text-xs mt-1.5 flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3" />
+                          {errors.email}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Cargo e Setor */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label
+                          htmlFor="cargo"
+                          className="block text-sm font-medium text-foreground mb-2"
+                        >
+                          Cargo
+                        </label>
+                        <input
+                          type="text"
+                          id="cargo"
+                          name="cargo"
+                          value={formData.cargo}
+                          onChange={handleInputChange}
+                          className={`w-full px-4 py-2.5 border rounded-lg transition-colors bg-background ${
+                            errors.cargo
+                              ? "border-red-500 focus:border-red-500"
+                              : "border-border focus:border-primary"
+                          } focus:outline-none focus:ring-2 focus:ring-primary/20`}
+                          placeholder="Seu cargo"
+                        />
+                        {errors.cargo && (
+                          <p className="text-red-500 text-xs mt-1.5 flex items-center gap-1">
+                            <AlertCircle className="h-3 w-3" />
+                            {errors.cargo}
+                          </p>
+                        )}
+                      </div>
+
+                      <div>
+                        <label
+                          htmlFor="setor"
+                          className="block text-sm font-medium text-foreground mb-2"
+                        >
+                          Setor
+                        </label>
+                        <input
+                          type="text"
+                          id="setor"
+                          name="setor"
+                          value={formData.setor}
+                          onChange={handleInputChange}
+                          className={`w-full px-4 py-2.5 border rounded-lg transition-colors bg-background ${
+                            errors.setor
+                              ? "border-red-500 focus:border-red-500"
+                              : "border-border focus:border-primary"
+                          } focus:outline-none focus:ring-2 focus:ring-primary/20`}
+                          placeholder="Seu setor"
+                        />
+                        {errors.setor && (
+                          <p className="text-red-500 text-xs mt-1.5 flex items-center gap-1">
+                            <AlertCircle className="h-3 w-3" />
+                            {errors.setor}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Cards de Informação Rápida */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-card rounded-lg border border-border p-4 flex items-center gap-4">
+                    <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <Mail className="h-6 w-6 text-primary" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
+                        Email de Contato
+                      </p>
+                      <p
+                        className="text-sm font-medium text-foreground truncate"
+                        title={formData.email}
+                      >
+                        {formData.email || "Não informado"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="bg-card rounded-lg border border-border p-4 flex items-center gap-4">
+                    <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <Briefcase className="h-6 w-6 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
+                        Função
+                      </p>
+                      <p className="text-sm font-medium text-foreground">
+                        {formData.cargo || "Não informado"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </form>
+            )}
+
+            {/* Tab: Segurança */}
+            {activeTab === "seguranca" && (
+              <form onSubmit={handleSave} className="space-y-6">
+                {/* Card de Segurança */}
+                <div className="bg-card rounded-xl border border-border p-6">
+                  <div className="flex items-center gap-4 mb-6">
+                    <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
+                      <Shield className="h-8 w-8 text-primary" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-foreground">
+                        Alterar Senha
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        Mantenha sua conta segura com uma senha forte
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    {/* Senha Atual */}
+                    <div>
+                      <label
+                        htmlFor="senhaAtual"
+                        className="block text-sm font-medium text-foreground mb-2"
+                      >
+                        Senha Atual
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showPassword.atual ? "text" : "password"}
+                          id="senhaAtual"
+                          name="senhaAtual"
+                          value={formData.senhaAtual}
+                          onChange={handleInputChange}
+                          className={`w-full px-4 py-2.5 pr-12 border rounded-lg transition-colors bg-background ${
+                            errors.senhaAtual
+                              ? "border-red-500 focus:border-red-500"
+                              : "border-border focus:border-primary"
+                          } focus:outline-none focus:ring-2 focus:ring-primary/20`}
+                          placeholder="Digite sua senha atual"
+                          autoComplete="current-password"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => togglePasswordVisibility("atual")}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors p-1"
+                        >
+                          {showPassword.atual ? (
+                            <EyeOff className="h-5 w-5" />
+                          ) : (
+                            <Eye className="h-5 w-5" />
+                          )}
+                        </button>
+                      </div>
+                      {errors.senhaAtual && (
+                        <p className="text-red-500 text-xs mt-1.5 flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3" />
+                          {errors.senhaAtual}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Nova Senha e Confirmar */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label
+                          htmlFor="novaSenha"
+                          className="block text-sm font-medium text-foreground mb-2"
+                        >
+                          Nova Senha
+                        </label>
+                        <div className="relative">
+                          <input
+                            type={showPassword.nova ? "text" : "password"}
+                            id="novaSenha"
+                            name="novaSenha"
+                            value={formData.novaSenha}
+                            onChange={handleInputChange}
+                            className={`w-full px-4 py-2.5 pr-12 border rounded-lg transition-colors bg-background ${
+                              errors.novaSenha
+                                ? "border-red-500 focus:border-red-500"
+                                : "border-border focus:border-primary"
+                            } focus:outline-none focus:ring-2 focus:ring-primary/20`}
+                            placeholder="Mínimo 6 caracteres"
+                            autoComplete="new-password"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => togglePasswordVisibility("nova")}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors p-1"
+                          >
+                            {showPassword.nova ? (
+                              <EyeOff className="h-5 w-5" />
+                            ) : (
+                              <Eye className="h-5 w-5" />
+                            )}
+                          </button>
+                        </div>
+                        {errors.novaSenha && (
+                          <p className="text-red-500 text-xs mt-1.5 flex items-center gap-1">
+                            <AlertCircle className="h-3 w-3" />
+                            {errors.novaSenha}
+                          </p>
+                        )}
+                      </div>
+
+                      <div>
+                        <label
+                          htmlFor="confirmarSenha"
+                          className="block text-sm font-medium text-foreground mb-2"
+                        >
+                          Confirmar Nova Senha
+                        </label>
+                        <div className="relative">
+                          <input
+                            type={showPassword.confirmar ? "text" : "password"}
+                            id="confirmarSenha"
+                            name="confirmarSenha"
+                            value={formData.confirmarSenha}
+                            onChange={handleInputChange}
+                            className={`w-full px-4 py-2.5 pr-12 border rounded-lg transition-colors bg-background ${
+                              errors.confirmarSenha
+                                ? "border-red-500 focus:border-red-500"
+                                : "border-border focus:border-primary"
+                            } focus:outline-none focus:ring-2 focus:ring-primary/20`}
+                            placeholder="Repita a nova senha"
+                            autoComplete="new-password"
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              togglePasswordVisibility("confirmar")
+                            }
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors p-1"
+                          >
+                            {showPassword.confirmar ? (
+                              <EyeOff className="h-5 w-5" />
+                            ) : (
+                              <Eye className="h-5 w-5" />
+                            )}
+                          </button>
+                        </div>
+                        {errors.confirmarSenha && (
+                          <p className="text-red-500 text-xs mt-1.5 flex items-center gap-1">
+                            <AlertCircle className="h-3 w-3" />
+                            {errors.confirmarSenha}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Dicas de Segurança */}
+                <div className="bg-gradient-to-br from-primary/5 to-accent/5 rounded-xl border border-primary/20 p-6">
+                  <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                    <Lock className="h-4 w-4 text-primary" />
+                    Dicas para uma senha forte
+                  </h3>
+                  <ul className="space-y-2 text-sm text-muted-foreground">
+                    <li className="flex items-center gap-2">
+                      <div className="h-1 w-1 bg-primary rounded-full"></div>
+                      Use pelo menos 6 caracteres
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <div className="h-1 w-1 bg-primary rounded-full"></div>
+                      Combine letras maiúsculas, minúsculas e números
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <div className="h-1 w-1 bg-primary rounded-full"></div>
+                      Evite informações pessoais óbvias
+                    </li>
+                  </ul>
+                </div>
+              </form>
+            )}
+
+            {/* Tab: Certificados */}
+            {activeTab === "certificados" && (
+              <form onSubmit={handleSave} className="space-y-6">
+                {/* Card de Padrões */}
+                <div className="bg-card rounded-xl border border-border p-6">
+                  <div className="flex items-center gap-4 mb-6">
+                    <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
+                      <FileText className="h-8 w-8 text-primary" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-foreground">
+                        Padrões de Certificação
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        Configure padrões globais para todos os certificados
+                      </p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="padroesUtilizados"
+                      className="block text-sm font-medium text-foreground mb-2"
+                    >
+                      Padrões Utilizados
+                    </label>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Este texto aparecerá na seção "Padrões Utilizados" de
+                      todos os certificados. Inclua equipamentos, certificados
+                      RBC e datas de validade.
+                    </p>
+                    <textarea
+                      id="padroesUtilizados"
+                      name="padroesUtilizados"
+                      value={padroesUtilizados}
+                      onChange={(e) => setPadroesUtilizados(e.target.value)}
+                      rows={6}
+                      className="w-full px-4 py-3 border border-border rounded-lg transition-colors bg-background focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 resize-vertical"
+                      style={{ minHeight: "150px" }}
+                      placeholder="Exemplo:&#10;Termohigrômetro Digital HT600 Instrutherm, Certificado RBC Nº CAL – A 15694/25, (Validade 08/2026).&#10;Balança Analítica Metter Toledo SAG250, Certificado RBC Nº CAL – A 15695/25, (Validade 08/2026)."
+                    />
+                    <p className="text-xs text-muted-foreground mt-2">
+                      💡 Use o formato (Validade MM/AAAA) para ativar
+                      notificações automáticas de vencimento
+                    </p>
+                  </div>
+                </div>
+
+                {/* Preview Card */}
+                <div className="bg-gradient-to-br from-primary/5 to-accent/5 rounded-xl border border-primary/20 p-6">
+                  <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                    <Bell className="h-4 w-4 text-primary" />
+                    Sistema de Notificações
+                  </h3>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    O sistema verifica automaticamente as datas de validade e
+                    cria notificações:
+                  </p>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center gap-2 text-red-600">
+                      <div className="h-2 w-2 bg-red-600 rounded-full"></div>
+                      <span className="font-medium">
+                        Vencido ou ≤10 dias - Crítico
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-yellow-600">
+                      <div className="h-2 w-2 bg-yellow-600 rounded-full"></div>
+                      <span className="font-medium">≤60 dias - Atenção</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-blue-600">
+                      <div className="h-2 w-2 bg-blue-600 rounded-full"></div>
+                      <span className="font-medium">≤90 dias - Lembrete</span>
+                    </div>
+                  </div>
+                </div>
+              </form>
+            )}
+          </div>
+        </main>
+      </div>
 
       {/* Modal de Confirmação de Saída */}
       {showExitConfirm && (

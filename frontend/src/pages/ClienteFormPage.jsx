@@ -1,21 +1,19 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Save, ArrowLeft, Building, MapPin } from "lucide-react";
+import {
+  Save,
+  ArrowLeft,
+  Building2,
+  MapPin,
+  X,
+  CheckCircle2,
+  AlertCircle,
+} from "lucide-react";
 import {
   createCliente,
   getClienteById,
   updateCliente,
 } from "../services/clienteService";
-
-// Constantes para cores e estilos
-const COLORS = {
-  PRIMARY: "rgb(144, 199, 45)",
-  PRIMARY_HOVER: "rgb(130, 180, 40)",
-  TEXT: "rgb(75, 85, 99)",
-  BORDER_DEFAULT: "#d1d5db",
-  BORDER_ERROR: "#ef4444",
-  BACKGROUND: "rgb(249, 250, 251)",
-};
 
 const ESTADOS_BRASIL = [
   { value: "AC", label: "Acre" },
@@ -47,20 +45,6 @@ const ESTADOS_BRASIL = [
   { value: "TO", label: "Tocantins" },
 ];
 
-const ERROR_MESSAGES = {
-  LOAD_FAILED: "Erro ao carregar dados do cliente. Por favor, tente novamente.",
-  SAVE_FAILED: "Erro ao salvar cliente. Por favor, tente novamente.",
-  VALIDATION_REQUIRED: {
-    nome: "Nome é obrigatório",
-    rua: "Rua é obrigatória",
-    numero: "Número é obrigatório",
-    bairro: "Bairro é obrigatório",
-    cidade: "Cidade é obrigatória",
-    estado: "Estado é obrigatório",
-  },
-};
-
-// Componentes de formulário movidos para fora para evitar re-criação
 const FormInput = ({
   label,
   name,
@@ -69,38 +53,34 @@ const FormInput = ({
   type = "text",
   required = false,
   onChange,
-  validationErrors,
-  createFocusBlurHandlers,
+  error,
+  maxLength,
 }) => {
-  const fieldName = name;
-  const hasError = validationErrors[fieldName];
-  const focusBlurHandlers = createFocusBlurHandlers(fieldName);
-
   return (
-    <div>
-      <label
-        className="block text-sm font-medium mb-1"
-        style={{ color: COLORS.TEXT }}
-      >
+    <div className="space-y-2">
+      <label className="text-sm font-medium text-foreground">
         {label}
-        {required && "*"}
+        {required && <span className="text-red-500 ml-1">*</span>}
       </label>
       <input
         type={type}
         name={name}
         value={value}
         onChange={onChange}
-        className={`w-full px-3 py-2 border rounded-md transition-colors ${
-          hasError ? "border-red-500" : "border-gray-300 focus:border-green-500"
-        } focus:outline-none`}
-        style={{
-          borderColor: hasError ? COLORS.BORDER_ERROR : COLORS.BORDER_DEFAULT,
-          color: COLORS.TEXT,
-        }}
+        maxLength={maxLength}
         placeholder={placeholder}
-        {...focusBlurHandlers}
+        className={`w-full px-4 py-2.5 bg-background border rounded-lg transition-all outline-none ${
+          error
+            ? "border-red-500 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
+            : "border-border focus:border-primary focus:ring-2 focus:ring-primary/20"
+        }`}
       />
-      {hasError && <p className="text-red-500 text-xs mt-1">{hasError}</p>}
+      {error && (
+        <p className="text-xs text-red-500 flex items-center gap-1">
+          <AlertCircle className="h-3 w-3" />
+          {error}
+        </p>
+      )}
     </div>
   );
 };
@@ -112,34 +92,23 @@ const FormSelect = ({
   options,
   required = false,
   onChange,
-  validationErrors,
-  createFocusBlurHandlers,
+  error,
 }) => {
-  const fieldName = name;
-  const hasError = validationErrors[fieldName];
-  const focusBlurHandlers = createFocusBlurHandlers(fieldName);
-
   return (
-    <div>
-      <label
-        className="block text-sm font-medium mb-1"
-        style={{ color: COLORS.TEXT }}
-      >
+    <div className="space-y-2">
+      <label className="text-sm font-medium text-foreground">
         {label}
-        {required && "*"}
+        {required && <span className="text-red-500 ml-1">*</span>}
       </label>
       <select
         name={name}
         value={value}
         onChange={onChange}
-        className={`w-full px-3 py-2 border rounded-md transition-colors ${
-          hasError ? "border-red-500" : "border-gray-300 focus:border-green-500"
-        } focus:outline-none`}
-        style={{
-          borderColor: hasError ? COLORS.BORDER_ERROR : COLORS.BORDER_DEFAULT,
-          color: COLORS.TEXT,
-        }}
-        {...focusBlurHandlers}
+        className={`w-full px-4 py-2.5 bg-background border rounded-lg transition-all outline-none ${
+          error
+            ? "border-red-500 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
+            : "border-border focus:border-primary focus:ring-2 focus:ring-primary/20"
+        }`}
       >
         <option value="">Selecione um estado</option>
         {options.map((option) => (
@@ -148,86 +117,12 @@ const FormSelect = ({
           </option>
         ))}
       </select>
-      {hasError && <p className="text-red-500 text-xs mt-1">{hasError}</p>}
-    </div>
-  );
-};
-
-const FormInputMask = ({
-  label,
-  name,
-  value,
-  placeholder,
-  required = false,
-  onChange,
-  validationErrors,
-  createFocusBlurHandlers,
-}) => {
-  const inputRef = useRef(null);
-  const fieldName = name;
-  const hasError = validationErrors[fieldName];
-  const focusBlurHandlers = createFocusBlurHandlers(fieldName);
-
-  // Função para formatar CEP
-  const formatCEP = (inputValue) => {
-    // Remove tudo que não é dígito
-    let digits = inputValue.replace(/\D/g, "");
-
-    // Limita a 8 dígitos
-    if (digits.length > 8) {
-      digits = digits.substring(0, 8);
-    }
-
-    // Aplica a máscara 99999-999
-    if (digits.length > 5) {
-      return `${digits.substring(0, 5)}-${digits.substring(5)}`;
-    }
-
-    return digits;
-  };
-
-  const handleInputChange = (e) => {
-    const inputValue = e.target.value;
-    const formattedValue = formatCEP(inputValue);
-
-    // Cria um evento sintético com o valor formatado
-    const syntheticEvent = {
-      target: {
-        name: name,
-        value: formattedValue,
-      },
-    };
-
-    onChange(syntheticEvent);
-  };
-
-  return (
-    <div>
-      <label
-        className="block text-sm font-medium mb-1"
-        style={{ color: COLORS.TEXT }}
-      >
-        {label}
-        {required && "*"}
-      </label>
-      <input
-        ref={inputRef}
-        type="text"
-        name={name}
-        value={value}
-        onChange={handleInputChange}
-        className={`w-full px-3 py-2 border rounded-md transition-colors ${
-          hasError ? "border-red-500" : "border-gray-300 focus:border-green-500"
-        } focus:outline-none`}
-        style={{
-          borderColor: hasError ? COLORS.BORDER_ERROR : COLORS.BORDER_DEFAULT,
-          color: COLORS.TEXT,
-        }}
-        placeholder={placeholder}
-        maxLength={9} // 8 dígitos + 1 hífen
-        {...focusBlurHandlers}
-      />
-      {hasError && <p className="text-red-500 text-xs mt-1">{hasError}</p>}
+      {error && (
+        <p className="text-xs text-red-500 flex items-center gap-1">
+          <AlertCircle className="h-3 w-3" />
+          {error}
+        </p>
+      )}
     </div>
   );
 };
@@ -252,8 +147,9 @@ const ClienteFormPage = () => {
   const [formData, setFormData] = useState(initialState);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState(null);
   const [validationErrors, setValidationErrors] = useState({});
+  const [successMessage, setSuccessMessage] = useState(null);
+  const [errorMessage, setErrorMessage] = useState(null);
 
   useEffect(() => {
     if (isEditMode) {
@@ -261,49 +157,43 @@ const ClienteFormPage = () => {
     }
   }, [id, isEditMode]);
 
-  // Funções auxiliares para controle de estado
-  const clearValidationError = (fieldName) => {
-    if (validationErrors[fieldName]) {
-      setValidationErrors((prev) => ({
-        ...prev,
-        [fieldName]: null,
-      }));
-    }
-  };
-
-  // Handler reutilizável para focus/blur
-  const createFocusBlurHandlers = (fieldName) => ({
-    onFocus: (e) => {
-      if (!validationErrors[fieldName]) {
-        e.target.style.borderColor = COLORS.PRIMARY;
-      }
-    },
-    onBlur: (e) => {
-      if (!validationErrors[fieldName]) {
-        e.target.style.borderColor = COLORS.BORDER_DEFAULT;
-      }
-    },
-  });
-
-  // Função para buscar cliente
   const fetchCliente = async () => {
     try {
       setLoading(true);
       const cliente = await getClienteById(id);
       setFormData(cliente);
     } catch (err) {
-      setError(ERROR_MESSAGES.LOAD_FAILED);
+      setErrorMessage(
+        "Erro ao carregar dados do cliente. Por favor, tente novamente."
+      );
       console.error("Erro ao carregar cliente:", err);
     } finally {
       setLoading(false);
     }
   };
 
-  // Handler para mudanças nos campos
+  const formatCEP = (value) => {
+    let digits = value.replace(/\D/g, "");
+    if (digits.length > 8) digits = digits.substring(0, 8);
+    if (digits.length > 5) {
+      return `${digits.substring(0, 5)}-${digits.substring(5)}`;
+    }
+    return digits;
+  };
+
   const handleChange = (e) => {
     const { name, value } = e.target;
 
-    if (name.includes(".")) {
+    if (name === "endereco.cep") {
+      const formattedCep = formatCEP(value);
+      setFormData((prev) => ({
+        ...prev,
+        endereco: {
+          ...prev.endereco,
+          cep: formattedCep,
+        },
+      }));
+    } else if (name.includes(".")) {
       const [parent, child] = name.split(".");
       setFormData((prev) => ({
         ...prev,
@@ -319,57 +209,64 @@ const ClienteFormPage = () => {
       }));
     }
 
-    clearValidationError(name);
+    // Limpa erro do campo quando usuário começa a digitar
+    if (validationErrors[name]) {
+      setValidationErrors((prev) => ({
+        ...prev,
+        [name]: null,
+      }));
+    }
   };
 
-  // Função de validação
   const validateForm = () => {
     const errors = {};
 
-    if (!formData.nome) errors.nome = ERROR_MESSAGES.VALIDATION_REQUIRED.nome;
-
-    // Validação do endereço
-    if (!formData.endereco.rua)
-      errors["endereco.rua"] = ERROR_MESSAGES.VALIDATION_REQUIRED.rua;
-    if (!formData.endereco.numero)
-      errors["endereco.numero"] = ERROR_MESSAGES.VALIDATION_REQUIRED.numero;
-    if (!formData.endereco.bairro)
-      errors["endereco.bairro"] = ERROR_MESSAGES.VALIDATION_REQUIRED.bairro;
-    if (!formData.endereco.cidade)
-      errors["endereco.cidade"] = ERROR_MESSAGES.VALIDATION_REQUIRED.cidade;
-    if (!formData.endereco.estado)
-      errors["endereco.estado"] = ERROR_MESSAGES.VALIDATION_REQUIRED.estado;
+    if (!formData.nome?.trim()) {
+      errors.nome = "Nome é obrigatório";
+    }
+    if (!formData.endereco?.rua?.trim()) {
+      errors["endereco.rua"] = "Rua é obrigatória";
+    }
+    if (!formData.endereco?.numero?.trim()) {
+      errors["endereco.numero"] = "Número é obrigatório";
+    }
+    if (!formData.endereco?.bairro?.trim()) {
+      errors["endereco.bairro"] = "Bairro é obrigatório";
+    }
+    if (!formData.endereco?.cidade?.trim()) {
+      errors["endereco.cidade"] = "Cidade é obrigatória";
+    }
+    if (!formData.endereco?.estado) {
+      errors["endereco.estado"] = "Estado é obrigatório";
+    }
 
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
-  // Função para preparar dados para envio
-  const prepareDataForSubmission = () => ({
-    ...formData,
-    endereco: {
-      rua: formData.endereco?.rua || "",
-      numero: formData.endereco?.numero || "",
-      bairro: formData.endereco?.bairro || "",
-      cidade: formData.endereco?.cidade || "",
-      estado: formData.endereco?.estado || "",
-      cep: formData.endereco?.cep || "",
-    },
-  });
-
-  // Handler para envio do formulário
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (!validateForm()) {
+      setErrorMessage("Por favor, preencha todos os campos obrigatórios.");
       return;
     }
 
     try {
       setSaving(true);
-      const dadosParaEnvio = prepareDataForSubmission();
+      setErrorMessage(null);
 
-      console.log("Dados enviados:", dadosParaEnvio);
+      const dadosParaEnvio = {
+        ...formData,
+        endereco: {
+          rua: formData.endereco?.rua || "",
+          numero: formData.endereco?.numero || "",
+          bairro: formData.endereco?.bairro || "",
+          cidade: formData.endereco?.cidade || "",
+          estado: formData.endereco?.estado || "",
+          cep: formData.endereco?.cep || "",
+        },
+      };
 
       if (isEditMode) {
         await updateCliente(id, dadosParaEnvio);
@@ -379,143 +276,122 @@ const ClienteFormPage = () => {
 
       navigate("/clientes");
     } catch (err) {
-      console.error("Erro detalhado:", err);
-      setError(
-        err.message ||
-          (err.error
-            ? `Erro ao salvar cliente: ${err.error}`
-            : ERROR_MESSAGES.SAVE_FAILED)
+      console.error("Erro ao salvar:", err);
+      setErrorMessage(
+        err.message || "Erro ao salvar cliente. Por favor, tente novamente."
       );
-      window.scrollTo(0, 0);
     } finally {
       setSaving(false);
     }
   };
-  // Componentes internos para melhor organização
-  const LoadingScreen = () => (
-    <div
-      className="min-h-screen w-full flex items-center justify-center p-6"
-      style={{
-        backgroundColor: COLORS.BACKGROUND,
-        position: "fixed",
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        overflow: "auto",
-      }}
-    >
-      <div
-        className="p-6 max-w-4xl mx-auto"
-        style={{
-          background: "rgba(255, 255, 255, 0.95)",
-          borderRadius: "20px",
-          boxShadow:
-            "0 20px 40px rgba(0, 0, 0, 0.1), 0 4px 8px rgba(0, 0, 0, 0.05)",
-          backdropFilter: "blur(10px)",
-          border: "1px solid rgba(255, 255, 255, 0.2)",
-        }}
-      >
-        <div className="text-center p-4">
-          <div
-            className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 mx-auto"
-            style={{
-              borderTopColor: COLORS.PRIMARY,
-              borderBottomColor: COLORS.PRIMARY,
-            }}
-          ></div>
-          <p className="mt-3" style={{ color: COLORS.TEXT }}>
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-muted-foreground">
             Carregando dados do cliente...
           </p>
         </div>
       </div>
-    </div>
-  );
-
-  if (loading) {
-    return <LoadingScreen />;
+    );
   }
+
   return (
-    <div
-      className="min-h-screen w-full flex items-center justify-center p-6"
-      style={{
-        backgroundColor: COLORS.BACKGROUND,
-        position: "fixed",
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        overflow: "auto",
-      }}
-    >
-      <div
-        className="w-full max-w-4xl mx-auto"
-        style={{
-          background: "rgba(255, 255, 255, 0.95)",
-          borderRadius: "20px",
-          boxShadow:
-            "0 20px 40px rgba(0, 0, 0, 0.1), 0 4px 8px rgba(0, 0, 0, 0.05)",
-          backdropFilter: "blur(10px)",
-          border: "1px solid rgba(255, 255, 255, 0.2)",
-          padding: "2rem",
-          position: "relative",
-          zIndex: 1,
-        }}
-      >
-        <div className="flex justify-between items-center mb-6">
+    <div className="min-h-screen bg-background">
+      <div className="max-w-5xl mx-auto p-6 space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
           <button
-            className="flex items-center hover:opacity-80"
-            style={{ color: COLORS.PRIMARY }}
             onClick={() => navigate("/clientes")}
             disabled={saving}
+            className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
           >
-            <ArrowLeft className="mr-2" /> Voltar
+            <ArrowLeft className="h-5 w-5" />
+            <span>Voltar</span>
           </button>
-          <h1
-            className="text-2xl font-bold text-center"
-            style={{ color: COLORS.PRIMARY }}
-          >
+
+          <h1 className="text-2xl font-bold text-foreground">
             {isEditMode ? "Editar Cliente" : "Novo Cliente"}
           </h1>
-          <div>{/* Espaço para equilibrar o layout */}</div>
+
+          <div className="w-20"></div>
         </div>
 
-        {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-md mb-4">
-            {error}
+        {/* Success Message */}
+        {successMessage && (
+          <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-4 flex items-start gap-3">
+            <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-green-700 dark:text-green-400">
+                {successMessage}
+              </p>
+            </div>
+            <button
+              onClick={() => setSuccessMessage(null)}
+              className="text-green-500 hover:text-green-700 transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Informações básicas */}
-          <div className="p-4 rounded-md border border-gray-200">
-            <h2
-              className="text-lg font-semibold flex items-center mb-3"
-              style={{ color: COLORS.TEXT }}
+        {/* Error Message */}
+        {errorMessage && (
+          <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-red-700 dark:text-red-400">{errorMessage}</p>
+            </div>
+            <button
+              onClick={() => setErrorMessage(null)}
+              className="text-red-500 hover:text-red-700 transition-colors"
             >
-              <Building className="mr-2" /> Informações do Cliente
-            </h2>
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+
+        {/* Form Card */}
+        <form
+          onSubmit={handleSubmit}
+          className="bg-card border border-border rounded-lg shadow-sm overflow-hidden"
+        >
+          {/* Informações do Cliente */}
+          <div className="p-6 border-b border-border">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Building2 className="h-5 w-5 text-primary" />
+              </div>
+              <h2 className="text-lg font-semibold text-foreground">
+                Informações do Cliente
+              </h2>
+            </div>
+
             <FormInput
               label="Nome da Empresa"
               name="nome"
               value={formData.nome}
-              placeholder="Nome da empresa"
+              placeholder="Digite o nome da empresa"
               required
               onChange={handleChange}
-              validationErrors={validationErrors}
-              createFocusBlurHandlers={createFocusBlurHandlers}
+              error={validationErrors.nome}
             />
           </div>
 
           {/* Endereço */}
-          <div className="p-4 rounded-md border border-gray-200">
-            <h2
-              className="text-lg font-semibold flex items-center mb-3"
-              style={{ color: COLORS.TEXT }}
-            >
-              <MapPin className="mr-2" /> Endereço
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <MapPin className="h-5 w-5 text-primary" />
+              </div>
+              <h2 className="text-lg font-semibold text-foreground">
+                Endereço
+              </h2>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <FormInput
                 label="Rua"
                 name="endereco.rua"
@@ -523,9 +399,9 @@ const ClienteFormPage = () => {
                 placeholder="Nome da rua"
                 required
                 onChange={handleChange}
-                validationErrors={validationErrors}
-                createFocusBlurHandlers={createFocusBlurHandlers}
+                error={validationErrors["endereco.rua"]}
               />
+
               <FormInput
                 label="Número"
                 name="endereco.numero"
@@ -533,9 +409,9 @@ const ClienteFormPage = () => {
                 placeholder="123"
                 required
                 onChange={handleChange}
-                validationErrors={validationErrors}
-                createFocusBlurHandlers={createFocusBlurHandlers}
+                error={validationErrors["endereco.numero"]}
               />
+
               <FormInput
                 label="Bairro"
                 name="endereco.bairro"
@@ -543,18 +419,19 @@ const ClienteFormPage = () => {
                 placeholder="Nome do bairro"
                 required
                 onChange={handleChange}
-                validationErrors={validationErrors}
-                createFocusBlurHandlers={createFocusBlurHandlers}
+                error={validationErrors["endereco.bairro"]}
               />
-              <FormInputMask
+
+              <FormInput
                 label="CEP"
                 name="endereco.cep"
                 value={formData.endereco.cep}
                 placeholder="00000-000"
                 onChange={handleChange}
-                validationErrors={validationErrors}
-                createFocusBlurHandlers={createFocusBlurHandlers}
+                error={validationErrors["endereco.cep"]}
+                maxLength={9}
               />
+
               <FormInput
                 label="Cidade"
                 name="endereco.cidade"
@@ -562,9 +439,9 @@ const ClienteFormPage = () => {
                 placeholder="Nome da cidade"
                 required
                 onChange={handleChange}
-                validationErrors={validationErrors}
-                createFocusBlurHandlers={createFocusBlurHandlers}
+                error={validationErrors["endereco.cidade"]}
               />
+
               <FormSelect
                 label="Estado"
                 name="endereco.estado"
@@ -572,39 +449,27 @@ const ClienteFormPage = () => {
                 options={ESTADOS_BRASIL}
                 required
                 onChange={handleChange}
-                validationErrors={validationErrors}
-                createFocusBlurHandlers={createFocusBlurHandlers}
+                error={validationErrors["endereco.estado"]}
               />
             </div>
           </div>
 
-          {/* Botões de ação */}
-          <div className="flex justify-end gap-4">
+          {/* Actions */}
+          <div className="p-6 bg-muted/30 border-t border-border flex justify-end gap-3">
             <button
               type="button"
               onClick={() => navigate("/clientes")}
-              className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500"
-              style={{ color: COLORS.TEXT }}
               disabled={saving}
+              className="px-4 py-2.5 border border-border rounded-lg text-foreground hover:bg-muted transition-colors disabled:opacity-50"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              className="px-4 py-2 text-white rounded-md flex items-center focus:outline-none focus:ring-2 disabled:opacity-50"
-              style={{
-                backgroundColor: COLORS.PRIMARY,
-                "--tw-ring-color": COLORS.PRIMARY,
-              }}
-              onMouseEnter={(e) =>
-                (e.target.style.backgroundColor = COLORS.PRIMARY_HOVER)
-              }
-              onMouseLeave={(e) =>
-                (e.target.style.backgroundColor = COLORS.PRIMARY)
-              }
               disabled={saving}
+              className="px-4 py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg flex items-center gap-2 shadow-sm transition-all disabled:opacity-50"
             >
-              <Save className="mr-2" />
+              <Save className="h-4 w-4" />
               {saving ? "Salvando..." : "Salvar Cliente"}
             </button>
           </div>

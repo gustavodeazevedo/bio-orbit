@@ -1,6 +1,18 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { UserPlus, Search, Edit, Trash2, ArrowLeft } from "lucide-react";
+import {
+  UserPlus,
+  Search,
+  Edit,
+  Trash2,
+  ArrowLeft,
+  Users,
+  Building2,
+  MapPin,
+  AlertCircle,
+  CheckCircle2,
+  X,
+} from "lucide-react";
 import { getClientes, deleteCliente } from "../services/clienteService";
 import { TableSkeleton } from "../components/SkeletonLoader";
 import useColdStartDetection from "../hooks/useColdStartDetection";
@@ -12,6 +24,7 @@ const ClientesPage = () => {
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [successMessage, setSuccessMessage] = useState("");
   const navigate = useNavigate();
 
   // Debounce search term para evitar re-renders excessivos
@@ -56,6 +69,8 @@ const ClientesPage = () => {
           await deleteCliente(id);
           setClientes(clientes.filter((cliente) => cliente._id !== id));
           setConfirmDelete(null);
+          setSuccessMessage("Cliente excluído com sucesso!");
+          setTimeout(() => setSuccessMessage(""), 3000);
         } catch (err) {
           setError(err.message || "Erro ao excluir cliente");
           console.error("Erro ao excluir cliente:", err);
@@ -82,137 +97,308 @@ const ClientesPage = () => {
   }, [clientes, debouncedSearchTerm]);
 
   return (
-    <div className="p-6 max-w-6xl mx-auto bg-white rounded-lg shadow-md">
-      <div className="flex justify-between items-center mb-6">
-        <button
-          className="hover:opacity-80 flex items-center"
-          style={{ color: "rgb(144, 199, 45)" }}
-          onClick={() => navigate("/dashboard")}
-        >
-          <ArrowLeft className="mr-2" /> Voltar
-        </button>
-        <h1
-          className="text-2xl font-bold text-center"
-          style={{ color: "rgb(144, 199, 45)" }}
-        >
-          Gerenciar Clientes
-        </h1>
-        <div>{/* Espaço para equilibrar o layout */}</div>
-      </div>
-
-      <div className="flex justify-between items-center mb-6">
-        <div className="relative w-64">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Buscar cliente..."
-            className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg w-full focus:outline-none focus:ring-1 focus:border-[rgb(144,199,45)]"
-            style={{ "--tw-ring-color": "rgb(144, 199, 45)" }}
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+    <div className="flex h-screen bg-background overflow-hidden">
+      {/* Sidebar */}
+      <aside className="w-64 h-screen bg-card border-r border-border flex flex-col">
+        {/* Header */}
+        <div className="h-20 px-6 flex items-center border-b border-border">
+          <button
+            onClick={() => navigate("/dashboard")}
+            className="hover:bg-muted p-2 rounded-lg transition-colors -ml-2"
+            title="Voltar"
+          >
+            <ArrowLeft className="h-5 w-5 text-foreground" />
+          </button>
+          <h1 className="text-xl font-bold text-foreground ml-2">Clientes</h1>
         </div>
-        <button
-          onClick={() => navigate("/clientes/novo")}
-          className="text-white px-4 py-2 rounded-lg flex items-center hover:opacity-80"
-          style={{ backgroundColor: "rgb(144, 199, 45)" }}
-        >
-          <UserPlus className="mr-2" /> Novo Cliente
-        </button>
-      </div>
 
-      {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-md mb-4">
-          {error}
+        {/* Estatísticas */}
+        <div className="flex-1 p-4 space-y-4">
+          <div className="bg-gradient-to-br from-primary/5 to-accent/5 rounded-xl border border-primary/20 p-4">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Users className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">
+                  Total de Clientes
+                </p>
+                <p className="text-2xl font-bold text-foreground">
+                  {clientes.length}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {searchTerm && (
+            <div className="bg-gradient-to-br from-primary/5 to-primary/10 rounded-lg border border-primary/20 p-3">
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-8 rounded-md bg-primary/20 flex items-center justify-center">
+                  <Search className="h-4 w-4 text-primary" />
+                </div>
+                <div>
+                  <p className="text-lg font-bold text-foreground">
+                    {filteredClientes.length}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {filteredClientes.length === 1 ? "resultado" : "resultados"}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
-      )}
+      </aside>
 
-      {loading ? (
-        <TableSkeleton rows={5} columns={4} />
-      ) : filteredClientes.length > 0 ? (
-        <div className="overflow-x-auto">
-          <table className="min-w-full bg-white border border-gray-200 rounded-lg">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="py-3 px-4 text-left text-sm font-semibold text-gray-600">
-                  Nome
-                </th>
-                <th className="py-3 px-4 text-left text-sm font-semibold text-gray-600">
-                  Cidade
-                </th>
-                <th className="py-3 px-4 text-left text-sm font-semibold text-gray-600">
-                  Estado
-                </th>
-                <th className="py-3 px-4 text-center text-sm font-semibold text-gray-600">
-                  Ações
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {filteredClientes.map((cliente) => (
-                <tr key={cliente._id} className="hover:bg-gray-50">
-                  <td className="py-2 px-4 text-sm text-gray-900">
-                    {cliente.nome}
-                  </td>
-                  <td className="py-2 px-4 text-sm text-gray-900">
-                    {cliente.endereco?.cidade || "-"}
-                  </td>
-                  <td className="py-2 px-4 text-sm text-gray-900">
-                    {cliente.endereco?.estado || "-"}
-                  </td>
-                  <td className="py-2 px-4 text-sm text-gray-900 text-center">
-                    <div className="flex justify-center space-x-2">
-                      <button
-                        onClick={() => handleEdit(cliente._id)}
-                        className="text-blue-600 hover:text-blue-800"
-                      >
-                        <Edit />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(cliente._id)}
-                        className={`${
-                          confirmDelete === cliente._id
-                            ? "text-red-600"
-                            : "text-gray-600 hover:text-red-600"
-                        }`}
-                      >
-                        <Trash2 />
-                      </button>
+      {/* Conteúdo Principal */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Header */}
+        <header className="h-20 bg-card border-b border-border px-8 flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-semibold text-foreground">
+              Gerenciar Clientes
+            </h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Cadastre e edite informações dos clientes
+            </p>
+          </div>
+
+          <button
+            onClick={() => navigate("/clientes/novo")}
+            className="px-6 py-2 bg-primary hover:bg-primary/90 text-primary-foreground font-medium shadow-sm hover:shadow-md transition-all duration-200 rounded-lg flex items-center gap-2"
+          >
+            <UserPlus className="h-4 w-4" />
+            Novo Cliente
+          </button>
+        </header>
+
+        {/* Main Content */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <main className="flex-1 overflow-y-auto p-8 space-y-6">
+            {/* Mensagem de sucesso */}
+            {successMessage && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-start gap-3 animate-in slide-in-from-top duration-300">
+                <CheckCircle2 className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-green-900">
+                    {successMessage}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setSuccessMessage("")}
+                  className="hover:bg-green-100 p-1 rounded transition-colors"
+                >
+                  <X className="h-4 w-4 text-green-600" />
+                </button>
+              </div>
+            )}
+
+            {/* Mensagem de erro */}
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-red-900">{error}</p>
+                </div>
+                <button
+                  onClick={() => setError(null)}
+                  className="hover:bg-red-100 p-1 rounded transition-colors"
+                >
+                  <X className="h-4 w-4 text-red-600" />
+                </button>
+              </div>
+            )}
+
+            {/* Barra de Busca */}
+              <div className="relative">
+                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-muted-foreground h-5 w-5 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Buscar cliente por nome..."
+                  className="w-full pl-12 pr-12 py-3 border border-border rounded-lg transition-colors bg-background focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+                {searchTerm && (
+                  <button
+                    onClick={() => setSearchTerm("")}
+                    className="absolute right-4 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                )}
+              </div>
+
+            {/* Tabela de Clientes */}
+            {loading ? (
+              <div className="bg-card rounded-xl border border-border p-6">
+                <TableSkeleton rows={5} columns={4} />
+              </div>
+            ) : filteredClientes.length > 0 ? (
+              <div className="bg-card rounded-xl border border-border overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-border">
+                    <thead className="bg-muted/30">
+                      <tr>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                          Cliente
+                        </th>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                          Localização
+                        </th>
+                        <th className="px-6 py-4 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                          Ações
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {filteredClientes.map((cliente) => (
+                        <tr
+                          key={cliente._id}
+                          className="hover:bg-muted/50 transition-colors"
+                        >
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                                <Building2 className="h-5 w-5 text-primary" />
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium text-foreground">
+                                  {cliente.nome}
+                                </p>
+                                {cliente.contato?.responsavel && (
+                                  <p className="text-xs text-muted-foreground">
+                                    {cliente.contato.responsavel}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-start gap-2">
+                              <MapPin className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                              <div>
+                                <p className="text-sm text-foreground">
+                                  {cliente.endereco?.cidade || "-"}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {cliente.endereco?.estado || "-"}
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex justify-center items-center gap-2">
+                              <button
+                                onClick={() => handleEdit(cliente._id)}
+                                className="p-2 hover:bg-blue-50 text-blue-600 rounded-lg transition-colors"
+                                title="Editar cliente"
+                              >
+                                <Edit className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(cliente._id)}
+                                className={`p-2 rounded-lg transition-colors ${
+                                  confirmDelete === cliente._id
+                                    ? "bg-red-50 text-red-600"
+                                    : "hover:bg-red-50 text-gray-600 hover:text-red-600"
+                                }`}
+                                title="Excluir cliente"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                            {confirmDelete === cliente._id && (
+                              <div className="mt-3 text-center">
+                                <p className="text-xs text-red-600 font-medium mb-2">
+                                  Confirmar exclusão?
+                                </p>
+                                <div className="flex justify-center gap-2">
+                                  <button
+                                    onClick={() => handleDelete(cliente._id)}
+                                    className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded-lg transition-colors font-medium"
+                                  >
+                                    Sim
+                                  </button>
+                                  <button
+                                    onClick={cancelDelete}
+                                    className="px-3 py-1 border border-border hover:bg-muted text-foreground text-xs rounded-lg transition-colors font-medium"
+                                  >
+                                    Não
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-card rounded-xl border border-border p-12 text-center">
+                <div className="flex flex-col items-center">
+                  <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center mb-4">
+                    <Users className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-foreground mb-2">
+                    {searchTerm
+                      ? "Nenhum cliente encontrado"
+                      : "Nenhum cliente cadastrado"}
+                  </h3>
+                  <p className="text-sm text-muted-foreground mb-6">
+                    {searchTerm
+                      ? "Tente buscar com outros termos ou limpe o filtro."
+                      : "Comece cadastrando seu primeiro cliente para emitir certificados."}
+                  </p>
+                  {!searchTerm && (
+                    <button
+                      onClick={() => navigate("/clientes/novo")}
+                      className="px-6 py-2 bg-primary hover:bg-primary/90 text-primary-foreground font-medium shadow-sm hover:shadow-md transition-all duration-200 rounded-lg flex items-center gap-2"
+                    >
+                      <UserPlus className="h-4 w-4" />
+                      Cadastrar Primeiro Cliente
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Rodapé com informações */}
+            {!loading && filteredClientes.length > 0 && (
+              <div className="bg-gradient-to-br from-primary/5 to-accent/5 rounded-xl border border-primary/20 p-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <CheckCircle2 className="h-5 w-5 text-primary" />
                     </div>
-                    {confirmDelete === cliente._id && (
-                      <div className="mt-2 text-xs flex justify-center space-x-2">
-                        <span className="text-red-600">
-                          Confirmar exclusão?
-                        </span>
-                        <button
-                          onClick={() => handleDelete(cliente._id)}
-                          className="text-red-600 font-bold"
-                        >
-                          Sim
-                        </button>
-                        <button
-                          onClick={cancelDelete}
-                          className="text-gray-600 font-bold"
-                        >
-                          Não
-                        </button>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">
+                        {filteredClientes.length}{" "}
+                        {filteredClientes.length === 1
+                          ? "cliente listado"
+                          : "clientes listados"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Total no sistema: {clientes.length}
+                      </p>
+                    </div>
+                  </div>
+                  {searchTerm && (
+                    <button
+                      onClick={() => setSearchTerm("")}
+                      className="px-4 py-2 border border-border rounded-lg hover:bg-muted transition-colors text-foreground font-medium text-sm"
+                    >
+                      Limpar filtros
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </main>
         </div>
-      ) : (
-        <div className="text-center p-6 bg-gray-50 rounded-lg">
-          <p className="text-gray-500">
-            {searchTerm
-              ? "Nenhum cliente encontrado com os termos de busca."
-              : "Nenhum cliente cadastrado."}
-          </p>
-        </div>
-      )}
+      </div>
     </div>
   );
 };

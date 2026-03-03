@@ -96,36 +96,11 @@ function App() {
               <Route path="/configuracoes" element={<ConfiguracoesPage />} />
 
               {/* Rotas de clientes - com wrapper */}
-              <Route
-                path="/clientes"
-                element={
-                  <div className="min-h-screen bg-gray-50">
-                    <main className="container mx-auto px-4 py-8">
-                      <ClientesPage />
-                    </main>
-                  </div>
-                }
-              />
-              <Route
-                path="/clientes/novo"
-                element={
-                  <div className="min-h-screen bg-gray-50">
-                    <main className="container mx-auto px-4 py-8">
-                      <ClienteFormPage />
-                    </main>
-                  </div>
-                }
-              />
-              <Route
-                path="/clientes/editar/:id"
-                element={
-                  <div className="min-h-screen bg-gray-50">
-                    <main className="container mx-auto px-4 py-8">
-                      <ClienteFormPage />
-                    </main>
-                  </div>
-                }
-              />
+              <Route path="/clientes" element={<ClientesPage />} />
+
+              <Route path="/clientes/novo" element={<ClienteFormPage />} />
+
+              <Route path="/clientes/editar/:id" element={<ClienteFormPage />} />
 
               {/* Rotas de certificados - com wrapper */}
               <Route
