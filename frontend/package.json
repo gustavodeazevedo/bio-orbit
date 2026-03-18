@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "node scripts/generateVersion.mjs && vite build",
     "build:analyze": "vite build --mode production && vite-bundle-visualizer",
     "preview": "vite preview",
     "test": "vitest",
