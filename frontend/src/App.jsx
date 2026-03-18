@@ -100,28 +100,19 @@ function App() {
 
               <Route path="/clientes/novo" element={<ClienteFormPage />} />
 
-              <Route path="/clientes/editar/:id" element={<ClienteFormPage />} />
+              <Route
+                path="/clientes/editar/:id"
+                element={<ClienteFormPage />}
+              />
 
               {/* Rotas de certificados - com wrapper */}
               <Route
                 path="/selecionar-cliente"
-                element={
-                  <div className="min-h-screen bg-gray-50">
-                    <main className="container mx-auto px-4 py-8">
-                      <SelecionarClientePage />
-                    </main>
-                  </div>
-                }
+                element={<SelecionarClientePage />}
               />
               <Route
                 path="/emitir-certificado/:id"
-                element={
-                  <div className="min-h-screen bg-gray-50">
-                    <main className="container mx-auto px-4 py-8">
-                      <EmitirCertificadoPage />
-                    </main>
-                  </div>
-                }
+                element={<EmitirCertificadoPage />}
               />
             </Route>
 
