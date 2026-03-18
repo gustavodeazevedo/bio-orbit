@@ -3,61 +3,49 @@ import { RefreshCw } from "lucide-react";
 
 const UpdateNotification = () => {
   const [showNotification, setShowNotification] = useState(false);
-  const [currentVersion, setCurrentVersion] = useState(null);
   const [newVersion, setNewVersion] = useState(null);
+  const currentVersionRef = useRef(null);
   // Ref para rastrear a última atividade do usuário
   const lastActivityRef = useRef(Date.now());
 
-  // Intervalo para checar atualizações (1 minuto == 60s == 60000ms)
-  const CHECK_INTERVAL_MS = 60000;
+  // Intervalo para checar atualizações (default: 30s)
+  const CHECK_INTERVAL_MS = Number(import.meta.env.VITE_VERSION_CHECK_INTERVAL_MS) || 30000;
 
   // Tempo de inatividade para aplicar atualização automaticamente (1 minuto == 60s == 60000ms)
-  const IDLE_TIMEOUT_MS = 60000;
+  const IDLE_TIMEOUT_MS = Number(import.meta.env.VITE_VERSION_IDLE_TIMEOUT_MS) || 60000;
 
-  // Checa atualizações a cada minuto
+  const buildVersionUrl = () => `/version.json?t=${Date.now()}`;
+
+  const fetchVersion = async () => {
+    const response = await fetch(buildVersionUrl(), {
+      cache: "no-store",
+      headers: {
+        "Cache-Control": "no-cache",
+        Pragma: "no-cache",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Falha ao carregar version.json (${response.status})`);
+    }
+
+    return response.json();
+  };
+
+  // Checa atualizações periodicamente e ao voltar para a aba/janela
   useEffect(() => {
-    let initialVersion = null;
-
-    // Carrega a versão inicial ao montar o componente
-    const loadInitialVersion = async () => {
-      // Adiciona timestamp para evitar cache
+    const checkForUpdates = async () => {
       try {
-        const response = await fetch(
-          // Adiciona timestamp para garantir que obtenha a versão mais recente, mesmo com cache
-          "/version.json?t=" + new Date().getTime(),
-          {
-            // Garantir que não use cache para obter a versão mais recente
-            cache: "no-store",
-          },
-        );
-        const data = await response.json();
-        initialVersion = data;
-        setCurrentVersion(data);
-        // tratamento de erro para caso a versão não seja carregada corretamente
-      } catch (error) {
-        console.error("Error loading initial version:", error);
-      }
-    };
+        const data = await fetchVersion();
 
-    loadInitialVersion();
+        if (!currentVersionRef.current) {
+          currentVersionRef.current = data;
+          return;
+        }
 
-    // Configura o intervalo para checar atualizações
-    const interval = setInterval(async () => {
-      try {
-        // Adiciona timestamp para garantir que obtenha a versão mais recente, mesmo com cache
-        const response = await fetch(
-          "/version.json?t=" + new Date().getTime(),
-          {
-            cache: "no-store",
-          },
-        );
-        const data = await response.json();
-
-        // Se a versão mudou em relação à versão inicial, mostra a notificação
         if (
-          initialVersion &&
-          (data.version !== initialVersion.version ||
-            data.buildTime !== initialVersion.buildTime)
+          data.version !== currentVersionRef.current.version ||
+          data.buildTime !== currentVersionRef.current.buildTime
         ) {
           setNewVersion(data);
           setShowNotification(true);
@@ -65,10 +53,34 @@ const UpdateNotification = () => {
       } catch (error) {
         console.error("Error checking for updates:", error);
       }
-    }, CHECK_INTERVAL_MS); // Checa a cada minuto
+    };
 
-    return () => clearInterval(interval);
-  }, []);
+    // Checa imediatamente ao montar
+    checkForUpdates();
+
+    // Checa em intervalo
+    const interval = setInterval(checkForUpdates, CHECK_INTERVAL_MS);
+
+    // Também checa ao retornar para a aba/janela
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        checkForUpdates();
+      }
+    };
+
+    const onFocus = () => {
+      checkForUpdates();
+    };
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [CHECK_INTERVAL_MS]);
 
   useEffect(() => {
     const markActivity = () => {
@@ -149,6 +161,7 @@ const UpdateNotification = () => {
 
         <p className="mt-4 text-xs text-muted-foreground">
           A atualização será aplicada automaticamente quando você ficar inativo.
+          {newVersion?.version ? ` Versão: ${newVersion.version}` : ""}
         </p>
       </div>
     </div>
