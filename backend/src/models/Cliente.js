@@ -1,6 +1,11 @@
 const mongoose = require('mongoose');
 
 const ClienteSchema = new mongoose.Schema({
+    criadoPor: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Usuario',
+        index: true
+    },
     nome: {
         type: String,
         required: [true, 'Nome do cliente é obrigatório'],

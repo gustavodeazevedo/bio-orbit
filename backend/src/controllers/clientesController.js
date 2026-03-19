@@ -1,9 +1,27 @@
 const Cliente = require('../models/Cliente');
 
+const isAdmin = (req) => Boolean(req.usuario && req.usuario.isAdmin);
+const ownerFilter = (req) => (isAdmin(req)
+    ? {}
+    : {
+        $or: [
+            { criadoPor: req.usuario._id },
+            { criadoPor: { $exists: false } },
+            { criadoPor: null }
+        ]
+    });
+
+const pickAllowedFields = (payload = {}) => {
+    const allowed = ['nome', 'cnpj', 'telefone', 'email', 'endereco', 'contato', 'ativo'];
+    return Object.fromEntries(
+        Object.entries(payload).filter(([key]) => allowed.includes(key))
+    );
+};
+
 // Obter todos os clientes
 exports.getClientes = async (req, res) => {
     try {
-        const clientes = await Cliente.find({ ativo: true }).sort({ nome: 1 });
+        const clientes = await Cliente.find({ ...ownerFilter(req), ativo: true }).sort({ nome: 1 });
         res.status(200).json(clientes);
     } catch (error) {
         res.status(500).json({
@@ -17,7 +35,7 @@ exports.getClientes = async (req, res) => {
 // Obter um cliente específico
 exports.getCliente = async (req, res) => {
     try {
-        const cliente = await Cliente.findById(req.params.id);
+        const cliente = await Cliente.findOne({ _id: req.params.id, ...ownerFilter(req) });
 
         if (!cliente) {
             return res.status(404).json({
@@ -39,9 +57,11 @@ exports.getCliente = async (req, res) => {
 // Criar um novo cliente
 exports.createCliente = async (req, res) => {
     try {
-        // Removida a verificação de CNPJ duplicado
-
-        const cliente = await Cliente.create(req.body);
+        const safePayload = pickAllowedFields(req.body);
+        const cliente = await Cliente.create({
+            ...safePayload,
+            criadoPor: req.usuario._id
+        });
         res.status(201).json({
             success: true,
             message: 'Cliente cadastrado com sucesso',
@@ -59,9 +79,12 @@ exports.createCliente = async (req, res) => {
 // Atualizar um cliente
 exports.updateCliente = async (req, res) => {
     try {
-        const cliente = await Cliente.findByIdAndUpdate(
-            req.params.id,
-            req.body,
+        const safePayload = pickAllowedFields(req.body);
+        delete safePayload.criadoPor;
+
+        const cliente = await Cliente.findOneAndUpdate(
+            { _id: req.params.id, ...ownerFilter(req) },
+            safePayload,
             {
                 new: true,
                 runValidators: true
@@ -92,8 +115,8 @@ exports.updateCliente = async (req, res) => {
 // Desativar um cliente (exclusão lógica)
 exports.deleteCliente = async (req, res) => {
     try {
-        const cliente = await Cliente.findByIdAndUpdate(
-            req.params.id,
+        const cliente = await Cliente.findOneAndUpdate(
+            { _id: req.params.id, ...ownerFilter(req) },
             { ativo: false },
             { new: true }
         );

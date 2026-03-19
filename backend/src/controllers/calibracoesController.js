@@ -1,12 +1,43 @@
 const Calibracao = require('../models/Calibracao');
 const Equipamento = require('../models/Equipamento');
 
+// isAdmin guarda a lógica para verificar se o usuário é admim
+const isAdmin = (req) => Boolean(req.usuario && req.usuario.isAdmin);
+// ownerFilter retorna um filtro para limitar os dados ao usuário criador, a menos que seja admin
+const ownerFilter = (req) => (isAdmin(req)
+    ? {}
+    : {
+        $or: [
+            { criadoPor: req.usuario._id },
+            { criadoPor: { $exists: false } },
+            { criadoPor: null }
+        ]
+    });
+
+// pickAllowedFields filtra os campos permitidos para criação/atualização de calibração, evitando que campos não autorizados sejam processados
+const pickAllowedFields = (payload = {}) => {
+    const allowed = [
+        'equipamento',
+        'dataCalibracao',
+        'dataProximaCalibracao',
+        'responsavelCalibracao',
+        'empresa',
+        'numeroCertificado',
+        'resultado',
+        'observacoes'
+    ];
+    return Object.fromEntries(
+        Object.entries(payload).filter(([key]) => allowed.includes(key))
+    );
+};
+
 // @desc    Buscar todas as calibrações
 // @route   GET /api/calibracoes
 // @access  Public
+
 const getCalibracoes = async (req, res) => {
     try {
-        const calibracoes = await Calibracao.find({}).populate('equipamento', 'nome numeroSerie');
+        const calibracoes = await Calibracao.find(ownerFilter(req)).populate('equipamento', 'nome numeroSerie');
         res.json(calibracoes);
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -18,7 +49,7 @@ const getCalibracoes = async (req, res) => {
 // @access  Public
 const getCalibracaoById = async (req, res) => {
     try {
-        const calibracao = await Calibracao.findById(req.params.id).populate('equipamento');
+        const calibracao = await Calibracao.findOne({ _id: req.params.id, ...ownerFilter(req) }).populate('equipamento');
 
         if (calibracao) {
             res.json(calibracao);
@@ -35,39 +66,25 @@ const getCalibracaoById = async (req, res) => {
 // @access  Private
 const createCalibracao = async (req, res) => {
     try {
-        const {
-            equipamento,
-            dataCalibracao,
-            dataProximaCalibracao,
-            responsavelCalibracao,
-            empresa,
-            numeroCertificado,
-            resultado,
-            observacoes
-        } = req.body;
+        const safePayload = pickAllowedFields(req.body);
+        const { equipamento } = safePayload;
 
         // Verificar se o equipamento existe
-        const equipamentoExists = await Equipamento.findById(equipamento);
+        const equipamentoExists = await Equipamento.findOne({ _id: equipamento, ...ownerFilter(req) });
         if (!equipamentoExists) {
             return res.status(400).json({ message: 'Equipamento não encontrado' });
         }
 
         const calibracao = new Calibracao({
-            equipamento,
-            dataCalibracao,
-            dataProximaCalibracao,
-            responsavelCalibracao,
-            empresa,
-            numeroCertificado,
-            resultado,
-            observacoes
+            ...safePayload,
+            criadoPor: req.usuario._id
         });
 
         const createdCalibracao = await calibracao.save();
 
         // Atualizar a data da última calibração e próxima calibração no equipamento
-        equipamentoExists.ultimaCalibracao = dataCalibracao;
-        equipamentoExists.proximaCalibracao = dataProximaCalibracao;
+        equipamentoExists.ultimaCalibracao = safePayload.dataCalibracao;
+        equipamentoExists.proximaCalibracao = safePayload.dataProximaCalibracao;
         await equipamentoExists.save();
 
         res.status(201).json(createdCalibracao);
@@ -81,35 +98,26 @@ const createCalibracao = async (req, res) => {
 // @access  Private
 const updateCalibracao = async (req, res) => {
     try {
-        const {
-            dataCalibracao,
-            dataProximaCalibracao,
-            responsavelCalibracao,
-            empresa,
-            numeroCertificado,
-            resultado,
-            observacoes
-        } = req.body;
+        const safePayload = pickAllowedFields(req.body);
+        delete safePayload.criadoPor;
 
-        const calibracao = await Calibracao.findById(req.params.id);
+        const calibracao = await Calibracao.findOne({ _id: req.params.id, ...ownerFilter(req) });
 
         if (calibracao) {
-            calibracao.dataCalibracao = dataCalibracao || calibracao.dataCalibracao;
-            calibracao.dataProximaCalibracao = dataProximaCalibracao || calibracao.dataProximaCalibracao;
-            calibracao.responsavelCalibracao = responsavelCalibracao || calibracao.responsavelCalibracao;
-            calibracao.empresa = empresa || calibracao.empresa;
-            calibracao.numeroCertificado = numeroCertificado || calibracao.numeroCertificado;
-            calibracao.resultado = resultado || calibracao.resultado;
-            calibracao.observacoes = observacoes || calibracao.observacoes;
+            Object.entries(safePayload).forEach(([key, value]) => {
+                if (value !== undefined && value !== null && value !== '') {
+                    calibracao[key] = value;
+                }
+            });
 
             const updatedCalibracao = await calibracao.save();
 
             // Atualizar a data da última calibração e próxima calibração no equipamento
-            if (dataCalibracao || dataProximaCalibracao) {
-                const equipamento = await Equipamento.findById(calibracao.equipamento);
+            if (safePayload.dataCalibracao || safePayload.dataProximaCalibracao) {
+                const equipamento = await Equipamento.findOne({ _id: calibracao.equipamento, ...ownerFilter(req) });
                 if (equipamento) {
-                    if (dataCalibracao) equipamento.ultimaCalibracao = dataCalibracao;
-                    if (dataProximaCalibracao) equipamento.proximaCalibracao = dataProximaCalibracao;
+                    if (safePayload.dataCalibracao) equipamento.ultimaCalibracao = safePayload.dataCalibracao;
+                    if (safePayload.dataProximaCalibracao) equipamento.proximaCalibracao = safePayload.dataProximaCalibracao;
                     await equipamento.save();
                 }
             }
@@ -128,7 +136,7 @@ const updateCalibracao = async (req, res) => {
 // @access  Private
 const deleteCalibracao = async (req, res) => {
     try {
-        const calibracao = await Calibracao.findById(req.params.id);
+        const calibracao = await Calibracao.findOne({ _id: req.params.id, ...ownerFilter(req) });
 
         if (calibracao) {
             await calibracao.deleteOne();
