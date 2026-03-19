@@ -1,6 +1,11 @@
 const mongoose = require('mongoose');
 
 const calibracaoSchema = mongoose.Schema({
+    criadoPor: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Usuario',
+        index: true
+    },
     equipamento: {
         type: mongoose.Schema.Types.ObjectId,
         required: true,

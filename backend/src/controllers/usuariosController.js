@@ -53,7 +53,7 @@ const authUsuario = async (req, res) => {
 // @access  Public
 const registerUsuario = async (req, res) => {
     try {
-        const { nome, email, senha, cargo, setor, isAdmin } = req.body;
+        const { nome, email, senha, cargo, setor } = req.body;
 
         // Verificar se o usuário já existe
         // Adicionando timeout explícito para a operação findOne
@@ -71,7 +71,7 @@ const registerUsuario = async (req, res) => {
             cargo,
             setor,
             verificado: true,
-            isAdmin: isAdmin || false
+            isAdmin: false
         });
 
         if (usuario) {

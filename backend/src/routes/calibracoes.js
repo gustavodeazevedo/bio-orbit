@@ -7,31 +7,33 @@ const {
     updateCalibracao,
     deleteCalibracao
 } = require('../controllers/calibracoesController');
-const { protect, admin } = require('../middlewares/auth');
+const { protect } = require('../middlewares/auth');
+
+router.use(protect);
 
 // @route   GET api/calibracoes
 // @desc    Get all calibracoes
-// @access  Public
+// @access  Private
 router.get('/', getCalibracoes);
 
 // @route   GET api/calibracoes/:id
 // @desc    Get calibracao by ID
-// @access  Public
+// @access  Private
 router.get('/:id', getCalibracaoById);
 
 // @route   POST api/calibracoes
 // @desc    Create a calibracao
 // @access  Private
-router.post('/', protect, createCalibracao);
+router.post('/', createCalibracao);
 
 // @route   PUT api/calibracoes/:id
 // @desc    Update calibracao
 // @access  Private
-router.put('/:id', protect, updateCalibracao);
+router.put('/:id', updateCalibracao);
 
 // @route   DELETE api/calibracoes/:id
 // @desc    Delete calibracao
 // @access  Private
-router.delete('/:id', protect, deleteCalibracao);
+router.delete('/:id', deleteCalibracao);
 
 module.exports = router;

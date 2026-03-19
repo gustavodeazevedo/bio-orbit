@@ -90,6 +90,8 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+const { protect } = require('./middlewares/auth');
+
 // Middleware de debug para CORS e requisições
 app.use((req, res, next) => {
     console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
@@ -128,8 +130,8 @@ app.get('/health', (req, res) => {
     });
 });
 
-// Rota de teste CORS (pública)
-app.get('/api/test', (req, res) => {
+// Rota de teste CORS (protegida)
+app.get('/api/test', protect, (req, res) => {
     res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
     res.status(200).json({
         message: 'CORS test successful',
@@ -141,7 +143,7 @@ app.get('/api/test', (req, res) => {
 
 // Rota padrão
 app.get('/', (req, res) => {
-    res.send('API do BioCalib funcionando!');
+    res.send('API do BioOrbit funcionando!');
 });
 
 // Middleware de tratamento de erros

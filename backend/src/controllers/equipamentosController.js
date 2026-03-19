@@ -1,11 +1,40 @@
 const Equipamento = require('../models/Equipamento');
 
+const isAdmin = (req) => Boolean(req.usuario && req.usuario.isAdmin);
+const ownerFilter = (req) => (isAdmin(req)
+    ? {}
+    : {
+        $or: [
+            { criadoPor: req.usuario._id },
+            { criadoPor: { $exists: false } },
+            { criadoPor: null }
+        ]
+    });
+
+const pickAllowedFields = (payload = {}) => {
+    const allowed = [
+        'nome',
+        'modelo',
+        'numeroSerie',
+        'fabricante',
+        'setor',
+        'responsavel',
+        'dataAquisicao',
+        'ultimaCalibracao',
+        'proximaCalibracao',
+        'status'
+    ];
+    return Object.fromEntries(
+        Object.entries(payload).filter(([key]) => allowed.includes(key))
+    );
+};
+
 // @desc    Buscar todos os equipamentos
 // @route   GET /api/equipamentos
 // @access  Public
 const getEquipamentos = async (req, res) => {
     try {
-        const equipamentos = await Equipamento.find({});
+        const equipamentos = await Equipamento.find(ownerFilter(req));
         res.json(equipamentos);
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -17,7 +46,7 @@ const getEquipamentos = async (req, res) => {
 // @access  Public
 const getEquipamentoById = async (req, res) => {
     try {
-        const equipamento = await Equipamento.findById(req.params.id);
+        const equipamento = await Equipamento.findOne({ _id: req.params.id, ...ownerFilter(req) });
 
         if (equipamento) {
             res.json(equipamento);
@@ -34,30 +63,11 @@ const getEquipamentoById = async (req, res) => {
 // @access  Private
 const createEquipamento = async (req, res) => {
     try {
-        const {
-            nome,
-            modelo,
-            numeroSerie,
-            fabricante,
-            setor,
-            responsavel,
-            dataAquisicao,
-            ultimaCalibracao,
-            proximaCalibracao,
-            status
-        } = req.body;
+        const safePayload = pickAllowedFields(req.body);
 
         const equipamento = new Equipamento({
-            nome,
-            modelo,
-            numeroSerie,
-            fabricante,
-            setor,
-            responsavel,
-            dataAquisicao,
-            ultimaCalibracao,
-            proximaCalibracao,
-            status
+            ...safePayload,
+            criadoPor: req.usuario._id
         });
 
         const createdEquipamento = await equipamento.save();
@@ -72,32 +82,17 @@ const createEquipamento = async (req, res) => {
 // @access  Private
 const updateEquipamento = async (req, res) => {
     try {
-        const {
-            nome,
-            modelo,
-            numeroSerie,
-            fabricante,
-            setor,
-            responsavel,
-            dataAquisicao,
-            ultimaCalibracao,
-            proximaCalibracao,
-            status
-        } = req.body;
+        const safePayload = pickAllowedFields(req.body);
+        delete safePayload.criadoPor;
 
-        const equipamento = await Equipamento.findById(req.params.id);
+        const equipamento = await Equipamento.findOne({ _id: req.params.id, ...ownerFilter(req) });
 
         if (equipamento) {
-            equipamento.nome = nome || equipamento.nome;
-            equipamento.modelo = modelo || equipamento.modelo;
-            equipamento.numeroSerie = numeroSerie || equipamento.numeroSerie;
-            equipamento.fabricante = fabricante || equipamento.fabricante;
-            equipamento.setor = setor || equipamento.setor;
-            equipamento.responsavel = responsavel || equipamento.responsavel;
-            equipamento.dataAquisicao = dataAquisicao || equipamento.dataAquisicao;
-            equipamento.ultimaCalibracao = ultimaCalibracao || equipamento.ultimaCalibracao;
-            equipamento.proximaCalibracao = proximaCalibracao || equipamento.proximaCalibracao;
-            equipamento.status = status || equipamento.status;
+            Object.entries(safePayload).forEach(([key, value]) => {
+                if (value !== undefined && value !== null && value !== '') {
+                    equipamento[key] = value;
+                }
+            });
 
             const updatedEquipamento = await equipamento.save();
             res.json(updatedEquipamento);
@@ -114,7 +109,7 @@ const updateEquipamento = async (req, res) => {
 // @access  Private
 const deleteEquipamento = async (req, res) => {
     try {
-        const equipamento = await Equipamento.findById(req.params.id);
+        const equipamento = await Equipamento.findOne({ _id: req.params.id, ...ownerFilter(req) });
 
         if (equipamento) {
             await equipamento.deleteOne();

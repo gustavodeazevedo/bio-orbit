@@ -1,6 +1,11 @@
 const mongoose = require('mongoose');
 
 const equipamentoSchema = mongoose.Schema({
+    criadoPor: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Usuario',
+        index: true
+    },
     nome: {
         type: String,
         required: true
