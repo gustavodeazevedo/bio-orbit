@@ -885,6 +885,31 @@ const EmitirCertificadoPage = () => {
       return;
     }
 
+    // Impede o fluxo da IA sem número do certificado base preenchido
+    const numeroCertificadoError = validateNumeroCertificado(
+      formData.numeroCertificado,
+      false,
+    );
+    if (numeroCertificadoError) {
+      setValidationErrors((prevErrors) => ({
+        ...prevErrors,
+        numeroCertificado: numeroCertificadoError,
+      }));
+
+      alert(
+        "Preencha corretamente o campo 'Número do Certificado' (ex: 1234.) antes de usar a IA para gerar o certificado.",
+      );
+
+      const inputElement = document.querySelector(
+        'input[name="numeroCertificado"]',
+      );
+      if (inputElement) {
+        inputElement.focus();
+      }
+
+      return;
+    }
+
     // Validar anotações para verificar se contêm unidades obrigatórias
     const annotationValidationErrors = validateNotionAnnotations(
       extractedData,
@@ -2287,6 +2312,16 @@ const EmitirCertificadoPage = () => {
                   name="numeroCertificado"
                   value={formData.numeroCertificado}
                   onChange={handleChange}
+                  onBlur={() => {
+                    const erro = validateNumeroCertificado(
+                      formData.numeroCertificado,
+                      false,
+                    );
+                    setValidationErrors((prevErrors) => ({
+                      ...prevErrors,
+                      numeroCertificado: erro,
+                    }));
+                  }}
                   placeholder="Ex: 1234."
                   title="Digite um ponto após o número da OS"
                   required
@@ -3474,7 +3509,18 @@ const EmitirCertificadoPage = () => {
               </div>
             </div>{" "}
             <div className="flex justify-end">
-              <ActionButton type="submit" variant="secondary">
+              <ActionButton
+                type="submit"
+                variant="secondary"
+                disabled={
+                  !!validateNumeroCertificado(formData.numeroCertificado, true)
+                }
+                title={
+                  validateNumeroCertificado(formData.numeroCertificado, true)
+                    ? "Preencha o número do certificado no formato válido para habilitar a geração."
+                    : ""
+                }
+              >
                 Gerar Certificado{" "}
                 <Sparkles className="ml-2" size={20} aria-hidden="true" />
               </ActionButton>
