@@ -122,6 +122,7 @@ const EmitirCertificadoPage = () => {
     ativo: false,
     mensagem: "",
   });
+  const [systemError, setSystemError] = useState(null);
 
   // Estado para controlar se a automação está habilitada
   const [automacaoHabilitada, setAutomacaoHabilitada] = useState(true);
@@ -611,7 +612,11 @@ const EmitirCertificadoPage = () => {
 
   const removerSeringa = (seringaId) => {
     if (seringas.length <= 1) {
-      alert("É necessário manter pelo menos uma seringa para calibração.");
+      setSystemError({
+        title: "Não foi possível remover a seringa",
+        description:
+          "É necessário manter pelo menos uma seringa para calibração.",
+      });
       return;
     }
     setSeringas(seringas.filter((seringa) => seringa.id !== seringaId));
@@ -713,6 +718,7 @@ const EmitirCertificadoPage = () => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    setSystemError(null);
 
     // Validar o número do certificado antes de gerar o PDF
     // Usar allowCompleteFormat=true para aceitar formato completo (1234.1)
@@ -729,8 +735,10 @@ const EmitirCertificadoPage = () => {
         numeroCertificado: errorNumeroCertificado,
       }));
 
-      // Mostra alerta para o usuário
-      alert("Erro de validação: " + errorNumeroCertificado);
+      setSystemError({
+        title: "Erro de validação",
+        description: errorNumeroCertificado,
+      });
 
       // Foca no campo com erro
       const inputElement = document.querySelector(
@@ -749,7 +757,10 @@ const EmitirCertificadoPage = () => {
         dataCalibracao: errorDataCalibracao,
       }));
 
-      alert("Erro de validação: " + errorDataCalibracao);
+      setSystemError({
+        title: "Erro de validação",
+        description: errorDataCalibracao,
+      });
 
       const inputElement = document.querySelector(
         'input[name="dataCalibracao"]',
@@ -763,12 +774,11 @@ const EmitirCertificadoPage = () => {
 
     // Verificar se há erros de anotação pendentes
     if (annotationErrors.length > 0) {
-      alert(
-        "❌ ERRO: Não é possível gerar o certificado!\n\n" +
-          "As anotações do Notion devem incluir unidades (ul ou ml):\n\n" +
-          annotationErrors.join("\n") +
-          "\n\nCorrija as anotações e use a IA novamente.",
-      );
+      setSystemError({
+        title: "Não foi possível gerar o certificado",
+        description:
+          "As anotações do Notion devem incluir unidades (ul ou ml). Corrija e tente novamente.",
+      });
       return; // Impede a geração do certificado
     }
 
@@ -808,6 +818,7 @@ const EmitirCertificadoPage = () => {
   }; // Função para fazer o download do certificado em PDF
   const handleDownloadCertificado = async () => {
     try {
+      setSystemError(null);
       // Preparar dados específicos para repipetadores
       const dadosParaPDF =
         formData.tipoEquipamento === "repipetador" ? seringas : pontosCalibra;
@@ -831,14 +842,17 @@ const EmitirCertificadoPage = () => {
       PDFService.baixarPDF(pdf, nomeArquivo);
     } catch (error) {
       console.error("Erro ao gerar certificado PDF:", error);
-      alert(
-        "Erro ao gerar o certificado. Verifique se todos os dados estão preenchidos corretamente.",
-      );
+      setSystemError({
+        title: "Erro ao gerar o certificado",
+        description:
+          "Verifique se todos os dados estão preenchidos corretamente e tente novamente.",
+      });
     }
   };
   // Função para visualizar o PDF antes de baixar
   const handleVisualizarCertificado = async () => {
     try {
+      setSystemError(null);
       // Preparar dados específicos para repipetadores
       const dadosParaPDF =
         formData.tipoEquipamento === "repipetador" ? seringas : pontosCalibra;
@@ -859,9 +873,11 @@ const EmitirCertificadoPage = () => {
       PDFService.abrirPDF(pdf);
     } catch (error) {
       console.error("Erro ao gerar certificado PDF:", error);
-      alert(
-        "Erro ao gerar o certificado. Verifique se todos os dados estão preenchidos corretamente.",
-      );
+      setSystemError({
+        title: "Erro ao gerar o certificado",
+        description:
+          "Verifique se todos os dados estão preenchidos corretamente e tente novamente.",
+      });
     }
   };
 
@@ -931,6 +947,8 @@ const EmitirCertificadoPage = () => {
       return;
     }
 
+    setSystemError(null);
+
     // Impede o fluxo da IA sem número do certificado base preenchido
     const numeroCertificadoError = validateNumeroCertificado(
       formData.numeroCertificado,
@@ -943,9 +961,11 @@ const EmitirCertificadoPage = () => {
         numeroCertificado: numeroCertificadoError,
       }));
 
-      alert(
-        "Preencha corretamente o campo 'Número do Certificado' (ex: 1234.) antes de usar a IA para gerar o certificado.",
-      );
+      setSystemError({
+        title: "Campo obrigatório pendente",
+        description:
+          "Preencha corretamente o campo 'Número do Certificado'.",
+      });
 
       const inputElement = document.querySelector(
         'input[name="numeroCertificado"]',
@@ -963,9 +983,11 @@ const EmitirCertificadoPage = () => {
         dataCalibracao: dataCalibracaoError,
       }));
 
-      alert(
-        "Preencha corretamente o campo 'Data da Calibração' antes de usar a IA para gerar o certificado.",
-      );
+      setSystemError({
+        title: "Campo obrigatório pendente",
+        description:
+          "Preencha corretamente o campo 'Data da Calibração' antes de usar a IA para gerar o certificado.",
+      });
 
       const inputElement = document.querySelector(
         'input[name="dataCalibracao"]',
@@ -987,16 +1009,11 @@ const EmitirCertificadoPage = () => {
     if (annotationValidationErrors.length > 0) {
       setAnnotationErrors(annotationValidationErrors);
 
-      // Mostrar alerta detalhado com todos os erros
-      alert(
-        "❌ ERRO: Anotações do Notion incompletas!\n\n" +
-          "As seguintes informações devem incluir unidades (ul ou ml):\n\n" +
-          annotationValidationErrors.join("\n") +
-          "\n\n📝 Formato correto:\n" +
-          "VOLUME: 100ul\n" +
-          "PONTOS DE INDICAÇÃO: 10-100ul\n" +
-          "PONTOS CALIBRADOS: 10-100ul",
-      );
+      setSystemError({
+        title: "Anotações do Notion incompletas",
+        description:
+          "Inclua unidades (ul ou ml) nas anotações para prosseguir com a automação.",
+      });
 
       return; // Bloqueia o processamento
     }
@@ -1379,12 +1396,18 @@ const EmitirCertificadoPage = () => {
         setPontosCalibra(pontosRestantes);
         setNumeroCanais(numeroCanais - 1);
       } else if (numeroCanais === 1) {
-        alert("É necessário manter pelo menos um canal de calibração.");
+        setSystemError({
+          title: "Não foi possível remover o canal",
+          description: "É necessário manter pelo menos um canal de calibração.",
+        });
       }
     } else {
       // Para monocanal, remover ponto individual
       if (pontosCalibra.length <= 1) {
-        alert("É necessário manter pelo menos um ponto de calibração.");
+        setSystemError({
+          title: "Não foi possível remover o ponto",
+          description: "É necessário manter pelo menos um ponto de calibração.",
+        });
         return;
       }
       setPontosCalibra(pontosCalibra.filter((ponto) => ponto.id !== id));
@@ -2310,6 +2333,19 @@ const EmitirCertificadoPage = () => {
             <Calculator className="mr-2" />
             {autoPreenchimento.mensagem}
           </div>
+        )}
+        {systemError && (
+          <InfoBanner
+            variant="error"
+            closable={true}
+            onClose={() => setSystemError(null)}
+            className="mb-6"
+          >
+            <div>
+              <p className="font-semibold">{systemError.title}</p>
+              {systemError.description && <p>{systemError.description}</p>}
+            </div>
+          </InfoBanner>
         )}
         {certificadoGerado ? (
           <CertificadoCard
