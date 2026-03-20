@@ -963,8 +963,7 @@ const EmitirCertificadoPage = () => {
 
       setSystemError({
         title: "Campo obrigatório pendente",
-        description:
-          "Preencha corretamente o campo 'Número do Certificado'.",
+        description: "Preencha corretamente o campo 'Número do Certificado'.",
       });
 
       const inputElement = document.querySelector(
@@ -2286,23 +2285,29 @@ const EmitirCertificadoPage = () => {
   }
   return (
     <div
-      className="min-h-screen w-full p-6"
+      className={`${
+        certificadoGerado
+          ? "h-screen w-full overflow-hidden p-0"
+          : "min-h-screen w-full px-2 py-2 sm:px-4 sm:py-4"
+      }`}
       style={{
         backgroundColor: "rgb(249, 250, 251)",
-        paddingTop: "2rem",
-        paddingBottom: "2rem",
       }}
     >
       <div
-        className="w-full max-w-6xl mx-auto"
+        className={`${
+          certificadoGerado
+            ? "w-full h-full overflow-y-auto overflow-x-hidden"
+            : "w-full min-h-[calc(100vh-1rem)] sm:min-h-[calc(100vh-2rem)]"
+        }`}
         style={{
           background: "rgba(255, 255, 255, 0.95)",
-          borderRadius: "20px",
+          borderRadius: certificadoGerado ? "0" : "20px",
           boxShadow:
             "0 20px 40px rgba(0, 0, 0, 0.1), 0 4px 8px rgba(0, 0, 0, 0.05)",
           backdropFilter: "blur(10px)",
           border: "1px solid rgba(255, 255, 255, 0.2)",
-          padding: "2rem",
+          padding: certificadoGerado ? "1rem" : "2rem",
           position: "relative",
           zIndex: 1,
         }}
@@ -3654,16 +3659,18 @@ const EmitirCertificadoPage = () => {
         {/* Controles de animação da IA movidos para dentro do chat */}
 
         {/* Assistente IA Chat - apenas na tela de preenchimento */}
-        <AIChatAssistant
-          onDataExtracted={handleDataExtracted}
-          showInCurrentPage={!certificadoGerado}
-          animationSpeed={animationSpeed}
-          setAnimationSpeed={setAnimationSpeed}
-          isAnimating={isAnimating}
-          stopAnimation={stopAnimation}
-          progress={animationProgress}
-          currentField={currentField}
-        />
+        {!certificadoGerado && (
+          <AIChatAssistant
+            onDataExtracted={handleDataExtracted}
+            showInCurrentPage={true}
+            animationSpeed={animationSpeed}
+            setAnimationSpeed={setAnimationSpeed}
+            isAnimating={isAnimating}
+            stopAnimation={stopAnimation}
+            progress={animationProgress}
+            currentField={currentField}
+          />
+        )}
       </div>
     </div>
   );

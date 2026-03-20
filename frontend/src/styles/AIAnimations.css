@@ -35,7 +35,7 @@
 
 .stepper-moving-dot {
   position: relative;
-  height: 0;
+  height: -10px;
   width: 75%;
   pointer-events: none;
 }
@@ -50,9 +50,9 @@
   border: 2px solid rgb(144, 199, 45);
   box-shadow: 0 0 12px rgba(144, 199, 45, 0.6);
   animation: movingDot 5s infinite linear;
-  transform: translateX(-50%) translateY(-2.8px);
+  transform: translate(-50%, -50%);
   z-index: 15;
-  top: 0;
+  top: 50%;
   will-change: left;
 }
 

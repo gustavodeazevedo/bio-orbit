@@ -19,8 +19,8 @@ const CertificadoCard = ({
   onNovoCertificado,
 }) => {
   return (
-    <div className="w-full min-h-[70vh] flex items-center justify-center px-2 sm:px-4 py-4">
-      <div className="w-full max-w-4xl bg-white p-4 sm:p-6 rounded-xl border border-gray-100 shadow-sm">
+    <div className="w-full min-h-full flex items-start justify-center px-0 py-2 sm:px-2 sm:py-4">
+      <div className="w-full bg-white p-4 sm:p-6 rounded-xl border border-gray-100 shadow-sm">
         <div className="text-center mb-6">
           <div className="inline-flex items-center px-4 py-2 bg-green-100 text-green-800 rounded-full border border-green-200 mb-6">
             <div className="relative flex items-center mr-2">
