@@ -237,6 +237,21 @@ const EmitirCertificadoPage = () => {
     return null; // Sem erro
   };
 
+  const validateDataCalibracao = (valor) => {
+    const valorLimpo = (valor || "").trim();
+
+    if (!valorLimpo) {
+      return "Data da calibração é obrigatória";
+    }
+
+    const formatoDataValido = /^\d{4}-\d{2}-\d{2}$/;
+    if (!formatoDataValido.test(valorLimpo)) {
+      return "Data da calibração inválida";
+    }
+
+    return null;
+  };
+
   // Função para validar anotações do Notion (unidades obrigatórias)
   const validateNotionAnnotations = (extractedData, originalText = "") => {
     const errors = [];
@@ -437,6 +452,18 @@ const EmitirCertificadoPage = () => {
       setFormData({
         ...formData,
         [name]: valorFiltrado,
+      });
+    } else if (name === "dataCalibracao") {
+      const erro = validateDataCalibracao(value);
+
+      setValidationErrors((prevErrors) => ({
+        ...prevErrors,
+        dataCalibracao: erro,
+      }));
+
+      setFormData({
+        ...formData,
+        [name]: value,
       });
     } else {
       setFormData({
@@ -693,6 +720,7 @@ const EmitirCertificadoPage = () => {
       formData.numeroCertificado,
       true, // Permite formato completo na validação final
     );
+    const errorDataCalibracao = validateDataCalibracao(formData.dataCalibracao);
 
     if (errorNumeroCertificado) {
       // Atualiza o estado de erro para mostrar na interface
@@ -713,6 +741,24 @@ const EmitirCertificadoPage = () => {
       }
 
       return; // Impede a geração do certificado
+    }
+
+    if (errorDataCalibracao) {
+      setValidationErrors((prevErrors) => ({
+        ...prevErrors,
+        dataCalibracao: errorDataCalibracao,
+      }));
+
+      alert("Erro de validação: " + errorDataCalibracao);
+
+      const inputElement = document.querySelector(
+        'input[name="dataCalibracao"]',
+      );
+      if (inputElement) {
+        inputElement.focus();
+      }
+
+      return;
     }
 
     // Verificar se há erros de anotação pendentes
@@ -890,6 +936,7 @@ const EmitirCertificadoPage = () => {
       formData.numeroCertificado,
       false,
     );
+    const dataCalibracaoError = validateDataCalibracao(formData.dataCalibracao);
     if (numeroCertificadoError) {
       setValidationErrors((prevErrors) => ({
         ...prevErrors,
@@ -902,6 +949,26 @@ const EmitirCertificadoPage = () => {
 
       const inputElement = document.querySelector(
         'input[name="numeroCertificado"]',
+      );
+      if (inputElement) {
+        inputElement.focus();
+      }
+
+      return;
+    }
+
+    if (dataCalibracaoError) {
+      setValidationErrors((prevErrors) => ({
+        ...prevErrors,
+        dataCalibracao: dataCalibracaoError,
+      }));
+
+      alert(
+        "Preencha corretamente o campo 'Data da Calibração' antes de usar a IA para gerar o certificado.",
+      );
+
+      const inputElement = document.querySelector(
+        'input[name="dataCalibracao"]',
       );
       if (inputElement) {
         inputElement.focus();
@@ -2342,17 +2409,33 @@ const EmitirCertificadoPage = () => {
                     placeholder="Selecione a data da calibração"
                     className="w-full px-3 py-2 border border-gray-300 rounded-md transition-colors duration-200 ease-in-out focus:border-green-500 focus:outline-none"
                     style={{
-                      borderColor: "#d1d5db",
+                      borderColor: validationErrors.dataCalibracao
+                        ? "#ef4444"
+                        : "#d1d5db",
                       color: "rgb(75, 85, 99)",
                     }}
                     onFocus={(e) => {
-                      e.target.style.borderColor = "rgb(144, 199, 45)";
+                      if (!validationErrors.dataCalibracao) {
+                        e.target.style.borderColor = "rgb(144, 199, 45)";
+                      }
                     }}
                     onBlur={(e) => {
-                      e.target.style.borderColor = "#d1d5db";
+                      const erro = validateDataCalibracao(
+                        formData.dataCalibracao,
+                      );
+                      setValidationErrors((prevErrors) => ({
+                        ...prevErrors,
+                        dataCalibracao: erro,
+                      }));
+                      e.target.style.borderColor = erro ? "#ef4444" : "#d1d5db";
                     }}
                     required
                   />
+                  {validationErrors.dataCalibracao && (
+                    <p className="mt-1 text-sm text-red-500">
+                      {validationErrors.dataCalibracao}
+                    </p>
+                  )}
                 </div>
               </div>
             </SectionCard>{" "}
@@ -3513,11 +3596,15 @@ const EmitirCertificadoPage = () => {
                 type="submit"
                 variant="secondary"
                 disabled={
-                  !!validateNumeroCertificado(formData.numeroCertificado, true)
+                  !!validateNumeroCertificado(
+                    formData.numeroCertificado,
+                    true,
+                  ) || !!validateDataCalibracao(formData.dataCalibracao)
                 }
                 title={
-                  validateNumeroCertificado(formData.numeroCertificado, true)
-                    ? "Preencha o número do certificado no formato válido para habilitar a geração."
+                  validateNumeroCertificado(formData.numeroCertificado, true) ||
+                  validateDataCalibracao(formData.dataCalibracao)
+                    ? "Preencha número do certificado e data da calibração para habilitar a geração."
                     : ""
                 }
               >
