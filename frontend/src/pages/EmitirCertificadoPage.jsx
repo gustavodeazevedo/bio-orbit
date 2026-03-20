@@ -35,6 +35,7 @@ import InfoBanner from "../components/InfoBanner";
 import RadioGroup from "../components/RadioGroup";
 import SectionCard from "../components/SectionCard";
 import AIChatAssistant from "../components/AIChatAssistant";
+import CertificadoCard from "../components/CertificadoCard";
 import useAnimatedInput from "../hooks/useAnimatedInput";
 import { getClienteById } from "../services/clienteService";
 import { formatNumberInput, formatTemperature } from "../utils/formatUtils";
@@ -42,16 +43,6 @@ import { PDFService } from "../services/pdfService";
 import "../styles/AutomationButton.css";
 import "../styles/AIAnimations.css";
 import "../styles/AIAnimatedInputs.css";
-import {
-  Stepper,
-  StepperDescription,
-  StepperIndicator,
-  StepperItem,
-  StepperSeparator,
-  StepperTitle,
-  StepperTrigger,
-} from "../components/ui/stepper";
-
 const EmitirCertificadoPage = () => {
   const { id } = useParams();
   const location = useLocation();
@@ -262,7 +253,7 @@ const EmitirCertificadoPage = () => {
     ) {
       console.log(
         "✅ Unidade de capacidade encontrada nos dados extraídos:",
-        extractedData.unidadeCapacidade
+        extractedData.unidadeCapacidade,
       );
     }
 
@@ -273,7 +264,7 @@ const EmitirCertificadoPage = () => {
     ) {
       console.log(
         "✅ Unidade de faixa indicação encontrada nos dados extraídos:",
-        extractedData.unidadeFaixaIndicacao
+        extractedData.unidadeFaixaIndicacao,
       );
     }
 
@@ -284,7 +275,7 @@ const EmitirCertificadoPage = () => {
     ) {
       console.log(
         "✅ Unidade de faixa calibrada encontrada nos dados extraídos:",
-        extractedData.unidadeFaixaCalibrada
+        extractedData.unidadeFaixaCalibrada,
       );
     }
 
@@ -301,7 +292,7 @@ const EmitirCertificadoPage = () => {
     // ESTRATÉGIA 2: Se não há texto original, não podemos validar - assumir que está correto
     if (!originalText || originalText.trim().length === 0) {
       console.log(
-        "⚠️ Sem texto original e sem unidades extraídas - assumindo validação OK"
+        "⚠️ Sem texto original e sem unidades extraídas - assumindo validação OK",
       );
       return []; // Sem erros por enquanto
     }
@@ -312,7 +303,7 @@ const EmitirCertificadoPage = () => {
     console.log("📊 VOLUME pattern match:", volumeMatch);
     if (!volumeMatch) {
       errors.push(
-        "VOLUME deve incluir unidade (ul ou ml). Exemplo: 'VOLUME: 100ul'"
+        "VOLUME deve incluir unidade (ul ou ml). Exemplo: 'VOLUME: 100ul'",
       );
     }
 
@@ -321,7 +312,7 @@ const EmitirCertificadoPage = () => {
     console.log("📈 PONTOS DE INDICAÇÃO pattern match:", indicacaoMatch);
     if (!indicacaoMatch) {
       errors.push(
-        "PONTOS DE INDICAÇÃO deve incluir unidade (ul ou ml). Exemplo: 'PONTOS DE INDICAÇÃO: 10-100ul'"
+        "PONTOS DE INDICAÇÃO deve incluir unidade (ul ou ml). Exemplo: 'PONTOS DE INDICAÇÃO: 10-100ul'",
       );
     }
 
@@ -330,7 +321,7 @@ const EmitirCertificadoPage = () => {
     console.log("🎯 PONTOS CALIBRADOS pattern match:", calibradosMatch);
     if (!calibradosMatch) {
       errors.push(
-        "PONTOS CALIBRADOS deve incluir unidade (ul ou ml). Exemplo: 'PONTOS CALIBRADOS: 10-100ul'"
+        "PONTOS CALIBRADOS deve incluir unidade (ul ou ml). Exemplo: 'PONTOS CALIBRADOS: 10-100ul'",
       );
     }
 
@@ -352,7 +343,7 @@ const EmitirCertificadoPage = () => {
           setError(null);
         } catch (err) {
           setError(
-            "Erro ao carregar dados do cliente. Por favor, tente novamente."
+            "Erro ao carregar dados do cliente. Por favor, tente novamente.",
           );
           console.error("Erro ao carregar cliente:", err);
         } finally {
@@ -470,7 +461,7 @@ const EmitirCertificadoPage = () => {
   // Função para reorganizar pontos para layout multicanal
   const reorganizarPontosParaMulticanal = (
     canaisCustomizados = null,
-    pontosPorCanalCustomizados = null
+    pontosPorCanalCustomizados = null,
   ) => {
     // Usar a quantidade de canais customizada ou a selecionada pelo usuário
     const novosCanais = canaisCustomizados || quantidadeCanais; // 8 ou 12 canais conforme seleção
@@ -481,7 +472,7 @@ const EmitirCertificadoPage = () => {
       novosCanais,
       "canais e",
       novosPontosPorCanal,
-      "pontos por canal"
+      "pontos por canal",
     );
     const novosPontos = [];
 
@@ -605,7 +596,7 @@ const EmitirCertificadoPage = () => {
           return { ...seringa, [campo]: valor };
         }
         return seringa;
-      })
+      }),
     );
   };
 
@@ -624,7 +615,7 @@ const EmitirCertificadoPage = () => {
           };
         }
         return seringa;
-      })
+      }),
     );
   };
 
@@ -646,7 +637,7 @@ const EmitirCertificadoPage = () => {
           };
         }
         return seringa;
-      })
+      }),
     );
   };
 
@@ -682,7 +673,7 @@ const EmitirCertificadoPage = () => {
           };
         }
         return seringa;
-      })
+      }),
     );
   };
 
@@ -700,7 +691,7 @@ const EmitirCertificadoPage = () => {
     // Usar allowCompleteFormat=true para aceitar formato completo (1234.1)
     const errorNumeroCertificado = validateNumeroCertificado(
       formData.numeroCertificado,
-      true // Permite formato completo na validação final
+      true, // Permite formato completo na validação final
     );
 
     if (errorNumeroCertificado) {
@@ -715,7 +706,7 @@ const EmitirCertificadoPage = () => {
 
       // Foca no campo com erro
       const inputElement = document.querySelector(
-        'input[name="numeroCertificado"]'
+        'input[name="numeroCertificado"]',
       );
       if (inputElement) {
         inputElement.focus();
@@ -730,7 +721,7 @@ const EmitirCertificadoPage = () => {
         "❌ ERRO: Não é possível gerar o certificado!\n\n" +
           "As anotações do Notion devem incluir unidades (ul ou ml):\n\n" +
           annotationErrors.join("\n") +
-          "\n\nCorreja as anotações e use a IA novamente."
+          "\n\nCorrija as anotações e use a IA novamente.",
       );
       return; // Impede a geração do certificado
     }
@@ -754,7 +745,7 @@ const EmitirCertificadoPage = () => {
 
       // Seleciona todos os inputs, selects e buttons focáveis no formulário
       const focusableElements = formRef.current.querySelectorAll(
-        'input:not([disabled]):not([type="hidden"]), select:not([disabled]), button:not([disabled]):not([type="submit"])'
+        'input:not([disabled]):not([type="hidden"]), select:not([disabled]), button:not([disabled]):not([type="submit"])',
       );
 
       const focusableArray = Array.from(focusableElements);
@@ -784,7 +775,7 @@ const EmitirCertificadoPage = () => {
         dadosParaPDF,
         fatorZ,
         seringasParaPDF,
-        padroesUtilizados
+        padroesUtilizados,
       );
 
       // Criar nome do arquivo
@@ -795,7 +786,7 @@ const EmitirCertificadoPage = () => {
     } catch (error) {
       console.error("Erro ao gerar certificado PDF:", error);
       alert(
-        "Erro ao gerar o certificado. Verifique se todos os dados estão preenchidos corretamente."
+        "Erro ao gerar o certificado. Verifique se todos os dados estão preenchidos corretamente.",
       );
     }
   };
@@ -815,7 +806,7 @@ const EmitirCertificadoPage = () => {
         dadosParaPDF,
         fatorZ,
         seringasParaPDF,
-        padroesUtilizados
+        padroesUtilizados,
       );
 
       // Abrir o PDF em uma nova aba para visualização
@@ -823,7 +814,7 @@ const EmitirCertificadoPage = () => {
     } catch (error) {
       console.error("Erro ao gerar certificado PDF:", error);
       alert(
-        "Erro ao gerar o certificado. Verifique se todos os dados estão preenchidos corretamente."
+        "Erro ao gerar o certificado. Verifique se todos os dados estão preenchidos corretamente.",
       );
     }
   };
@@ -842,7 +833,7 @@ const EmitirCertificadoPage = () => {
           if (ponto.canal !== 1) {
             // Encontrar o ponto correspondente no Canal 1
             const pontoCanalMestre = prevPontos.find(
-              (p) => p.canal === 1 && p.pontoPosicao === ponto.pontoPosicao
+              (p) => p.canal === 1 && p.pontoPosicao === ponto.pontoPosicao,
             );
 
             if (pontoCanalMestre && pontoCanalMestre.valoresTexto) {
@@ -897,7 +888,7 @@ const EmitirCertificadoPage = () => {
     // Validar anotações para verificar se contêm unidades obrigatórias
     const annotationValidationErrors = validateNotionAnnotations(
       extractedData,
-      originalText || extractedData.originalText || ""
+      originalText || extractedData.originalText || "",
     );
 
     // Se houver erros de anotação, mostrar e bloquear processo
@@ -912,7 +903,7 @@ const EmitirCertificadoPage = () => {
           "\n\n📝 Formato correto:\n" +
           "VOLUME: 100ul\n" +
           "PONTOS DE INDICAÇÃO: 10-100ul\n" +
-          "PONTOS CALIBRADOS: 10-100ul"
+          "PONTOS CALIBRADOS: 10-100ul",
       );
 
       return; // Bloqueia o processamento
@@ -1033,7 +1024,7 @@ const EmitirCertificadoPage = () => {
   // Função auxiliar para atualizar dados após animação
   const updateFormDataAfterAnimation = (
     extractedData,
-    numeroCertificadoFinal
+    numeroCertificadoFinal,
   ) => {
     // Atualizar dados do formulário
     setFormData((prev) => ({
@@ -1101,7 +1092,7 @@ const EmitirCertificadoPage = () => {
     ) {
       console.log(
         "🔧 IA detectou multicanal com canais:",
-        extractedData.quantidadeCanais
+        extractedData.quantidadeCanais,
       );
       setNumeroCanais(extractedData.quantidadeCanais);
       setQuantidadeCanais(extractedData.quantidadeCanais); // Também atualizar a quantidade de canais disponível
@@ -1115,7 +1106,7 @@ const EmitirCertificadoPage = () => {
       console.log(
         "🔧 IA detectou",
         numPontosExtraidos,
-        "pontos de calibração por canal"
+        "pontos de calibração por canal",
       );
 
       // Aguardar um tick para garantir que o número de canais seja atualizado primeiro
@@ -1124,7 +1115,7 @@ const EmitirCertificadoPage = () => {
         // Passamos explicitamente o número de pontos extraídos
         reorganizarPontosParaMulticanal(
           extractedData.quantidadeCanais,
-          numPontosExtraidos
+          numPontosExtraidos,
         );
 
         // Depois aplicar os dados do Canal Mestre extraídos pela IA
@@ -1132,7 +1123,7 @@ const EmitirCertificadoPage = () => {
           console.log(
             "📊 Pontos criados para",
             extractedData.quantidadeCanais,
-            "canais"
+            "canais",
           );
           setPontosCalibra((prevPontos) => {
             const pontosAtualizados = prevPontos.map((ponto) => {
@@ -1141,7 +1132,7 @@ const EmitirCertificadoPage = () => {
                 const pontoIA = extractedData.pontosCalibra.find(
                   (p) =>
                     p.volumeNominal === ponto.volumeNominal ||
-                    p.pontoPosicao === ponto.pontoPosicao
+                    p.pontoPosicao === ponto.pontoPosicao,
                 );
                 if (pontoIA) {
                   return {
@@ -1194,12 +1185,12 @@ const EmitirCertificadoPage = () => {
       try {
         const buttonClicked = await animateButtonClick(
           'button[type="submit"]',
-          "Gerar Certificado"
+          "Gerar Certificado",
         );
 
         if (buttonClicked) {
           console.log(
-            '🎉 IA clicou automaticamente no botão "Gerar Certificado"'
+            '🎉 IA clicou automaticamente no botão "Gerar Certificado"',
           );
         }
       } catch (error) {
@@ -1291,7 +1282,7 @@ const EmitirCertificadoPage = () => {
       if (ponto && numeroCanais > 1) {
         // Remove todos os pontos do canal
         const pontosRestantes = pontosCalibra.filter(
-          (p) => p.canal !== ponto.canal
+          (p) => p.canal !== ponto.canal,
         );
         setPontosCalibra(pontosRestantes);
         setNumeroCanais(numeroCanais - 1);
@@ -1316,7 +1307,7 @@ const EmitirCertificadoPage = () => {
           return { ...ponto, [campo]: valor };
         }
         return ponto;
-      })
+      }),
     );
   };
 
@@ -1333,7 +1324,7 @@ const EmitirCertificadoPage = () => {
           return { ...ponto, medicoes: novasMedicoes };
         }
         return ponto;
-      })
+      }),
     );
   }; // Função para realizar os cálculos de calibração para todos os pontos
   const calcularResultados = () => {
@@ -1358,10 +1349,10 @@ const EmitirCertificadoPage = () => {
       const volumesVol1 = valoresVol1.map((massa) => massa * testeFatorZ);
       const somaQuadradosVol1 = volumesVol1.reduce(
         (sum, vol) => sum + Math.pow(vol - mediaVolumeVol1, 2),
-        0
+        0,
       );
       const precisaoVol1 = Math.sqrt(
-        somaQuadradosVol1 / (volumesVol1.length - 1)
+        somaQuadradosVol1 / (volumesVol1.length - 1),
       );
       const precisaoPctVol1 = (precisaoVol1 / mediaVolumeVol1) * 100;
 
@@ -1369,28 +1360,28 @@ const EmitirCertificadoPage = () => {
       console.log(
         "Média massa:",
         mediaMassaVol1.toFixed(2),
-        "mg (Planilha: 99,45)"
+        "mg (Planilha: 99,45)",
       );
       console.log(
         "Mean Volume:",
         mediaVolumeVol1.toFixed(2),
-        "μL (Planilha: 99,88)"
+        "μL (Planilha: 99,88)",
       );
       console.log("Accuracy:", accuracyVol1.toFixed(2), "μL (Planilha: -0,12)");
       console.log(
         "Accuracy %:",
         accuracyPctVol1.toFixed(2),
-        "% (Planilha: -0,12%)"
+        "% (Planilha: -0,12%)",
       );
       console.log(
         "Precision (SD):",
         precisaoVol1.toFixed(2),
-        "μL (Planilha: 0,07)"
+        "μL (Planilha: 0,07)",
       );
       console.log(
         "Precision (CV):",
         precisaoPctVol1.toFixed(2),
-        "% (Planilha: 0,07%)"
+        "% (Planilha: 0,07%)",
       );
 
       // Teste para volume 500,00 μL
@@ -1406,10 +1397,10 @@ const EmitirCertificadoPage = () => {
       const volumesVol2 = valoresVol2.map((massa) => massa * testeFatorZ);
       const somaQuadradosVol2 = volumesVol2.reduce(
         (sum, vol) => sum + Math.pow(vol - mediaVolumeVol2, 2),
-        0
+        0,
       );
       const precisaoVol2 = Math.sqrt(
-        somaQuadradosVol2 / (volumesVol2.length - 1)
+        somaQuadradosVol2 / (volumesVol2.length - 1),
       );
       const precisaoPctVol2 = (precisaoVol2 / mediaVolumeVol2) * 100;
 
@@ -1417,28 +1408,28 @@ const EmitirCertificadoPage = () => {
       console.log(
         "Média massa:",
         mediaMassaVol2.toFixed(2),
-        "mg (Planilha: 495,65)"
+        "mg (Planilha: 495,65)",
       );
       console.log(
         "Mean Volume:",
         mediaVolumeVol2.toFixed(2),
-        "μL (Planilha: 497,78)"
+        "μL (Planilha: 497,78)",
       );
       console.log("Accuracy:", accuracyVol2.toFixed(2), "μL (Planilha: -2,22)");
       console.log(
         "Accuracy %:",
         accuracyPctVol2.toFixed(2),
-        "% (Planilha: -0,44%)"
+        "% (Planilha: -0,44%)",
       );
       console.log(
         "Precision (SD):",
         precisaoVol2.toFixed(2),
-        "μL (Planilha: 0,07)"
+        "μL (Planilha: 0,07)",
       );
       console.log(
         "Precision (CV):",
         precisaoPctVol2.toFixed(2),
-        "% (Planilha: 0,01%)"
+        "% (Planilha: 0,01%)",
       );
 
       // Teste para volume 1000,00 μL
@@ -1454,10 +1445,10 @@ const EmitirCertificadoPage = () => {
       const volumesVol3 = valoresVol3.map((massa) => massa * testeFatorZ);
       const somaQuadradosVol3 = volumesVol3.reduce(
         (sum, vol) => sum + Math.pow(vol - mediaVolumeVol3, 2),
-        0
+        0,
       );
       const precisaoVol3 = Math.sqrt(
-        somaQuadradosVol3 / (volumesVol3.length - 1)
+        somaQuadradosVol3 / (volumesVol3.length - 1),
       );
       const precisaoPctVol3 = (precisaoVol3 / mediaVolumeVol3) * 100;
 
@@ -1465,28 +1456,28 @@ const EmitirCertificadoPage = () => {
       console.log(
         "Média massa:",
         mediaMassaVol3.toFixed(2),
-        "mg (Planilha: 995,40)"
+        "mg (Planilha: 995,40)",
       );
       console.log(
         "Mean Volume:",
         mediaVolumeVol3.toFixed(2),
-        "μL (Planilha: 999,68)"
+        "μL (Planilha: 999,68)",
       );
       console.log("Accuracy:", accuracyVol3.toFixed(2), "μL (Planilha: -0,32)");
       console.log(
         "Accuracy %:",
         accuracyPctVol3.toFixed(2),
-        "% (Planilha: -0,03%)"
+        "% (Planilha: -0,03%)",
       );
       console.log(
         "Precision (SD):",
         precisaoVol3.toFixed(2),
-        "μL (Planilha: 0,14)"
+        "μL (Planilha: 0,14)",
       );
       console.log(
         "Precision (CV):",
         precisaoPctVol3.toFixed(2),
-        "% (Planilha: 0,01%)"
+        "% (Planilha: 0,01%)",
       );
 
       console.log("------------------------------------------");
@@ -1523,7 +1514,7 @@ const EmitirCertificadoPage = () => {
 
         // 2. Converter cada medição individual de massa (mg) para volume (µL)
         const volumesIndividuais = medicoesValidas.map(
-          (massa) => massa * fatorZ
+          (massa) => massa * fatorZ,
         );
 
         // 3. Calcular a média dos volumes convertidos
@@ -1538,11 +1529,11 @@ const EmitirCertificadoPage = () => {
         // 5. Calcular precisão (desvio padrão - SD) diretamente nos volumes convertidos
         const somaDosQuadradosDasDiferencas = volumesIndividuais.reduce(
           (sum, vol) => sum + Math.pow(vol - mediaVolume, 2),
-          0
+          0,
         );
 
         const desvioPadrao = Math.sqrt(
-          somaDosQuadradosDasDiferencas / (volumesIndividuais.length - 1)
+          somaDosQuadradosDasDiferencas / (volumesIndividuais.length - 1),
         );
 
         // 6. Cálculo do CV (Coeficiente de Variação)
@@ -1557,7 +1548,7 @@ const EmitirCertificadoPage = () => {
           desvioPadrao: parseFloat(desvioPadrao.toFixed(2)),
           coeficienteVariacao: parseFloat(coeficienteVariacao.toFixed(2)),
         };
-      })
+      }),
     );
   };
 
@@ -1608,10 +1599,10 @@ const EmitirCertificadoPage = () => {
 
     const somaDosQuadradosDasDiferencas = valoresNumericos.reduce(
       (acc, val) => acc + Math.pow(val - media, 2),
-      0
+      0,
     );
     return Math.sqrt(
-      somaDosQuadradosDasDiferencas / (valoresNumericos.length - 1)
+      somaDosQuadradosDasDiferencas / (valoresNumericos.length - 1),
     );
   };
 
@@ -1625,7 +1616,7 @@ const EmitirCertificadoPage = () => {
         pontosCalibra: seringa.pontosCalibra.map((ponto) => {
           // Verificar se há medições válidas
           const medicoesValidas = ponto.medicoes.filter(
-            (med) => med !== "" && !isNaN(parseFloat(med))
+            (med) => med !== "" && !isNaN(parseFloat(med)),
           );
 
           if (medicoesValidas.length === 0) {
@@ -1655,7 +1646,7 @@ const EmitirCertificadoPage = () => {
           const desvioPadrao = calcularDesvioPadrao(
             ponto.medicoes,
             mediaVolume,
-            fatorZ
+            fatorZ,
           );
 
           // Calcular coeficiente de variação
@@ -1672,7 +1663,7 @@ const EmitirCertificadoPage = () => {
             coeficienteVariacao: coeficienteVariacao,
           };
         }),
-      }))
+      })),
     );
   };
 
@@ -1713,7 +1704,7 @@ const EmitirCertificadoPage = () => {
       }
       // Remove todos os pontos do canal
       const pontosDoCanal = pontosCalibra.filter(
-        (p) => p.canal === numeroPonto
+        (p) => p.canal === numeroPonto,
       );
       pontosDoCanal.forEach((ponto) => {
         removerPontoCalibracao(ponto.id);
@@ -1755,7 +1746,7 @@ const EmitirCertificadoPage = () => {
   const gerarValoresSemelhantesMonocanal = (
     valores,
     numValores = 5,
-    limite = 0.03
+    limite = 0.03,
   ) => {
     const valoresSemelhantes = [];
     const valoresOriginais = valores.map((v) => parseFloat(v));
@@ -1828,7 +1819,7 @@ const EmitirCertificadoPage = () => {
       // Gera os próximos 5 valores similares usando a função baseada no código Python
       const valoresSemelhantes = gerarValoresSemelhantesMonocanal(
         valoresArray,
-        5
+        5,
       );
       valoresSemelhantes.forEach((valor, index) => {
         medicoesPadrao[index + 5] = valor.toString();
@@ -1851,7 +1842,7 @@ const EmitirCertificadoPage = () => {
             };
           }
           return ponto;
-        })
+        }),
       );
 
       // Esconder notificação após 2 segundos
@@ -1879,7 +1870,7 @@ const EmitirCertificadoPage = () => {
           };
         }
         return ponto;
-      })
+      }),
     ); // Automatização: Se for Canal 1 e multicanal, propagar valores similares aos outros canais
     if (
       isCanal1 &&
@@ -1988,11 +1979,11 @@ const EmitirCertificadoPage = () => {
           if (volumesIndividuais.length > 1 && media !== null) {
             const somaDosQuadradosDasDiferencas = volumesIndividuais.reduce(
               (sum, vol) => sum + Math.pow(vol - media, 2),
-              0
+              0,
             );
 
             desvioPadrao = Math.sqrt(
-              somaDosQuadradosDasDiferencas / (volumesIndividuais.length - 1)
+              somaDosQuadradosDasDiferencas / (volumesIndividuais.length - 1),
             );
 
             // Cálculo do CV (Coeficiente de Variação) - presente na planilha como Precision (CV)
@@ -2046,7 +2037,7 @@ const EmitirCertificadoPage = () => {
                     medicoesValidas.reduce((sum, val) => sum + val, 0) /
                     medicoesValidas.length;
                   const volumesIndividuais = medicoesValidas.map(
-                    (massa) => massa * fatorZ
+                    (massa) => massa * fatorZ,
                   );
                   const media =
                     volumesIndividuais.reduce((sum, vol) => sum + vol, 0) /
@@ -2065,10 +2056,10 @@ const EmitirCertificadoPage = () => {
                   if (volumesIndividuais.length > 1) {
                     const somaDosQuadrados = volumesIndividuais.reduce(
                       (sum, vol) => sum + Math.pow(vol - media, 2),
-                      0
+                      0,
                     );
                     desvioPadrao = Math.sqrt(
-                      somaDosQuadrados / (volumesIndividuais.length - 1)
+                      somaDosQuadrados / (volumesIndividuais.length - 1),
                     );
                     coeficienteVariacao =
                       media !== 0 ? (desvioPadrao / media) * 100 : 0;
@@ -2100,7 +2091,7 @@ const EmitirCertificadoPage = () => {
         }
 
         return ponto;
-      })
+      }),
     );
   };
   if (loading) {
@@ -2229,201 +2220,14 @@ const EmitirCertificadoPage = () => {
           </div>
         )}
         {certificadoGerado ? (
-          <div className="bg-white p-4">
-            <div className="max-w-4xl mx-auto">
-              {/* Header Minimalista */}
-              <div className="text-center mb-6">
-                {/* Badge Certificado Gerado */}
-                <div className="inline-flex items-center px-4 py-2 bg-green-100 text-green-800 rounded-full border border-green-200 mb-6">
-                  <div className="relative flex items-center mr-2">
-                    <div className="w-2 h-2 bg-green-500 rounded-full animate-ping"></div>
-                    <div className="w-2 h-2 bg-green-600 rounded-full absolute"></div>
-                  </div>
-                  Certificado Gerado
-                </div>
-              </div>
-              {/* Card Principal Minimalista */}{" "}
-              <div className="bg-white border border-gray-100 rounded-lg shadow-sm mb-6">
-                {/* Header do Certificado */}
-                <div className="text-center py-6 border-b border-gray-50">
-                  <h2 className="text-2xl font-medium text-gray-900 mb-2">
-                    Certificado de Calibração
-                  </h2>
-                  <p className="text-xl text-gray-500">
-                    {formData.numeroCertificado}
-                  </p>
-                </div>{" "}
-                {/* Informações do Certificado - Stepper Moderno */}
-                <div className="p-8">
-                  <div className="relative">
-                    {" "}
-                    {/* Linha de conexão animada que cresce do primeiro ao último círculo */}
-                    <div
-                      className="absolute top-5 stepper-line-animated z-0"
-                      style={{
-                        background:
-                          "linear-gradient(90deg, rgb(144, 199, 45), rgb(120, 170, 80), rgb(144, 199, 45))",
-                        left: "12.5%",
-                        right: "12.5%",
-                        transformOrigin: "left center",
-                      }}
-                    />{" "}
-                    {/* Bolinha animada que se move pela linha */}
-                    <div
-                      className="absolute top-5 stepper-moving-dot z-10"
-                      style={{
-                        left: "12.5%",
-                        right: "12.5%",
-                      }}
-                    />
-                    <Stepper defaultValue={4} className="relative z-10">
-                      <StepperItem step={1}>
-                        <StepperTrigger>
-                          <StepperIndicator className="border-2" step={1} />
-                          <div className="space-y-1 px-2 text-center mt-3">
-                            <StepperTitle
-                              step={1}
-                              style={{ color: "rgb(144, 199, 45)" }}
-                            >
-                              Cliente
-                            </StepperTitle>{" "}
-                            <StepperDescription
-                              step={1}
-                              style={{ color: "rgb(75, 120, 25)" }}
-                              className="font-medium"
-                            >
-                              {cliente?.nome || "N/A"}
-                            </StepperDescription>
-                          </div>
-                        </StepperTrigger>
-                      </StepperItem>
-
-                      <StepperItem step={2}>
-                        <StepperTrigger>
-                          <StepperIndicator className="border-2" step={2} />
-                          <div className="space-y-1 px-2 text-center mt-3">
-                            {" "}
-                            <StepperTitle
-                              step={2}
-                              style={{ color: "rgb(144, 199, 45)" }}
-                            >
-                              Equipamento
-                            </StepperTitle>{" "}
-                            <StepperDescription
-                              step={2}
-                              style={{ color: "rgb(75, 120, 25)" }}
-                              className="font-medium"
-                            >
-                              {formData.marcaPipeta} {formData.modeloPipeta}
-                            </StepperDescription>
-                            <StepperDescription
-                              step={2}
-                              style={{ color: "rgb(75, 120, 25)" }}
-                              className="text-xs"
-                            >
-                              Série: {formData.numeroPipeta}
-                            </StepperDescription>
-                          </div>
-                        </StepperTrigger>
-                      </StepperItem>
-
-                      <StepperItem step={3}>
-                        <StepperTrigger>
-                          <StepperIndicator className="border-2" step={3} />
-                          <div className="space-y-1 px-2 text-center mt-3">
-                            {" "}
-                            <StepperTitle
-                              step={3}
-                              style={{ color: "rgb(144, 199, 45)" }}
-                            >
-                              Condições
-                            </StepperTitle>{" "}
-                            <StepperDescription
-                              step={3}
-                              style={{ color: "rgb(75, 120, 25)" }}
-                              className="font-medium"
-                            >
-                              {formData.temperatura}°C •{" "}
-                              {formData.umidadeRelativa}%
-                            </StepperDescription>
-                            <StepperDescription
-                              step={3}
-                              style={{ color: "rgb(75, 120, 25)" }}
-                              className="text-xs"
-                            >
-                              Fator Z: {fatorZ.toFixed(4)}
-                            </StepperDescription>
-                          </div>
-                        </StepperTrigger>
-                      </StepperItem>
-
-                      <StepperItem step={4}>
-                        <StepperTrigger>
-                          <StepperIndicator className="border-2" step={4} />
-                          <div className="space-y-1 px-2 text-center mt-3">
-                            {" "}
-                            <StepperTitle
-                              step={4}
-                              style={{ color: "rgb(144, 199, 45)" }}
-                            >
-                              Emissão
-                            </StepperTitle>{" "}
-                            <StepperDescription
-                              step={4}
-                              style={{ color: "rgb(75, 120, 25)" }}
-                              className="font-medium"
-                            >
-                              {new Date().toLocaleDateString("pt-BR")}
-                            </StepperDescription>
-                            <StepperDescription
-                              step={4}
-                              style={{ color: "rgb(75, 120, 25)" }}
-                              className="text-xs"
-                            >
-                              {new Date().toLocaleTimeString("pt-BR")}
-                            </StepperDescription>
-                          </div>
-                        </StepperTrigger>
-                      </StepperItem>
-                    </Stepper>
-                  </div>
-                </div>
-              </div>{" "}
-              {/* Botões Principais */}
-              <div className="flex justify-center gap-4 mb-4">
-                <ActionButton
-                  onClick={handleVisualizarCertificado}
-                  variant="secondary"
-                  size="lg"
-                  icon={Eye}
-                  className="px-8"
-                >
-                  Visualizar
-                </ActionButton>
-
-                <ActionButton
-                  onClick={handleDownloadCertificado}
-                  variant="secondary"
-                  size="lg"
-                  icon={Download}
-                  className="px-8"
-                >
-                  Download
-                </ActionButton>
-              </div>{" "}
-              {/* Botões Secundários */}
-              <div className="flex justify-center gap-4">
-                <ActionButton
-                  onClick={handleEditarDados}
-                  variant="outline"
-                  size="md"
-                  className="px-6"
-                >
-                  Novo Certificado
-                </ActionButton>
-              </div>
-            </div>
-          </div>
+          <CertificadoCard
+            cliente={cliente}
+            formData={formData}
+            fatorZ={fatorZ}
+            onVisualizar={handleVisualizarCertificado}
+            onDownload={handleDownloadCertificado}
+            onNovoCertificado={handleEditarDados}
+          />
         ) : (
           <form
             onSubmit={handleSubmit}
@@ -2757,7 +2561,7 @@ const EmitirCertificadoPage = () => {
                             value={quantidadeCanais.toString()}
                             onChange={(e) =>
                               handleQuantidadeCanaisChange(
-                                parseInt(e.target.value)
+                                parseInt(e.target.value),
                               )
                             }
                             variant="canais"
@@ -2789,7 +2593,7 @@ const EmitirCertificadoPage = () => {
                               type="button"
                               onClick={() =>
                                 handlePontosPorCanalChange(
-                                  Math.max(1, pontosPorCanal - 1)
+                                  Math.max(1, pontosPorCanal - 1),
                                 )
                               }
                               className="flex items-center justify-center w-8 h-8 bg-white border border-gray-300 rounded-md hover:bg-gray-50 text-gray-600 transition-colors"
@@ -2804,7 +2608,7 @@ const EmitirCertificadoPage = () => {
                               type="button"
                               onClick={() =>
                                 handlePontosPorCanalChange(
-                                  Math.min(10, pontosPorCanal + 1)
+                                  Math.min(10, pontosPorCanal + 1),
                                 )
                               }
                               className="flex items-center justify-center w-8 h-8 bg-white border border-gray-300 rounded-md hover:bg-gray-50 text-gray-600 transition-colors"
@@ -3040,7 +2844,7 @@ const EmitirCertificadoPage = () => {
                               onClick={() =>
                                 removerSeringaDiretamente(
                                   seringa.id,
-                                  seringaIndex + 1
+                                  seringaIndex + 1,
                                 )
                               }
                               title={`Remover seringa ${seringaIndex + 1}`}
@@ -3068,7 +2872,7 @@ const EmitirCertificadoPage = () => {
                               atualizarSeringa(
                                 seringa.id,
                                 "volumeNominal",
-                                formatNumberInput(e.target.value)
+                                formatNumberInput(e.target.value),
                               )
                             }
                             placeholder="Volume nominal"
@@ -3091,7 +2895,7 @@ const EmitirCertificadoPage = () => {
                               atualizarSeringa(
                                 seringa.id,
                                 "unidade",
-                                e.target.value
+                                e.target.value,
                               )
                             }
                             className="px-3 py-2 border border-l-0 border-gray-300 rounded-r-md transition-colors duration-200 ease-in-out focus:outline-none focus:border-green-500"
@@ -3135,7 +2939,7 @@ const EmitirCertificadoPage = () => {
                                     seringa.id,
                                     ponto.id,
                                     "volumeNominal",
-                                    formatNumberInput(e.target.value)
+                                    formatNumberInput(e.target.value),
                                   )
                                 }
                                 onUnitChange={(e) =>
@@ -3143,7 +2947,7 @@ const EmitirCertificadoPage = () => {
                                     seringa.id,
                                     ponto.id,
                                     "unidade",
-                                    e.target.value
+                                    e.target.value,
                                   )
                                 }
                                 placeholder="Volume nominal"
@@ -3166,7 +2970,7 @@ const EmitirCertificadoPage = () => {
                                     handleValoresChangeSeringa(
                                       seringa.id,
                                       ponto.id,
-                                      e.target.value
+                                      e.target.value,
                                     )
                                   }
                                   placeholder="Cole os valores separados por vírgula"
@@ -3282,7 +3086,7 @@ const EmitirCertificadoPage = () => {
                   Array.from({ length: numeroCanais }, (_, canalIndex) => {
                     const canalNum = canalIndex + 1;
                     const pontosDoCanalAtual = pontosCalibra.filter(
-                      (p) => p.canal === canalNum
+                      (p) => p.canal === canalNum,
                     );
                     return (
                       <div
@@ -3309,7 +3113,7 @@ const EmitirCertificadoPage = () => {
                                     removerPontoDiretamente(
                                       primeiroPontoDoCanal.id,
                                       canalNum,
-                                      true
+                                      true,
                                     );
                                   }
                                 }}
@@ -3342,14 +3146,14 @@ const EmitirCertificadoPage = () => {
                                   onVolumeChange={(e) =>
                                     handleVolumeNominalChange(
                                       ponto.id,
-                                      e.target.value
+                                      e.target.value,
                                     )
                                   }
                                   onUnitChange={(e) =>
                                     atualizarPontoCalibracao(
                                       ponto.id,
                                       "unidade",
-                                      e.target.value
+                                      e.target.value,
                                     )
                                   }
                                   placeholder="Volume nominal"
@@ -3371,7 +3175,7 @@ const EmitirCertificadoPage = () => {
                                     onChange={(e) =>
                                       handleValoresChange(
                                         ponto.id,
-                                        e.target.value
+                                        e.target.value,
                                       )
                                     }
                                     placeholder="Cole os valores separados por vírgula"
@@ -3449,14 +3253,14 @@ const EmitirCertificadoPage = () => {
                                         <span
                                           className={
                                             Math.abs(
-                                              ponto.inexatidaoPercentual
+                                              ponto.inexatidaoPercentual,
                                             ) > 5
                                               ? "text-red-600 font-medium"
                                               : "text-green-600 font-medium"
                                           }
                                         >
                                           {ponto.inexatidaoPercentual?.toFixed(
-                                            2
+                                            2,
                                           )}
                                           %
                                         </span>
@@ -3474,7 +3278,7 @@ const EmitirCertificadoPage = () => {
                                         <span className="text-green-600 font-medium">
                                           CV:{" "}
                                           {ponto.coeficienteVariacao?.toFixed(
-                                            2
+                                            2,
                                           )}
                                           %
                                         </span>
@@ -3508,7 +3312,7 @@ const EmitirCertificadoPage = () => {
                                 onClick={() =>
                                   removerPontoDiretamente(
                                     ponto.id,
-                                    pontoIndex + 1
+                                    pontoIndex + 1,
                                   )
                                 }
                                 title="Remover ponto de calibração"
@@ -3526,14 +3330,14 @@ const EmitirCertificadoPage = () => {
                             onVolumeChange={(e) =>
                               handleVolumeNominalChange(
                                 ponto.id,
-                                e.target.value
+                                e.target.value,
                               )
                             }
                             onUnitChange={(e) =>
                               atualizarPontoCalibracao(
                                 ponto.id,
                                 "unidade",
-                                e.target.value
+                                e.target.value,
                               )
                             }
                             placeholder="Volume nominal"
