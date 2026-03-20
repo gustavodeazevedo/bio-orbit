@@ -73,6 +73,25 @@ const authService = {
         return userInfo ? JSON.parse(userInfo) : null;
     },
 
+    // Atualizar perfil (incluindo troca de senha)
+    updateProfile: async (updateData) => {
+        const response = await api.put('/usuarios/perfil', updateData);
+
+        // Mantém o estado de autenticação sincronizado após atualização
+        const currentUser = authService.getCurrentUser();
+        if (response.data && currentUser) {
+            localStorage.setItem(
+                'userInfo',
+                JSON.stringify({
+                    ...currentUser,
+                    ...response.data,
+                })
+            );
+        }
+
+        return response.data;
+    },
+
     // Verificar se o usuário está autenticado
     isAuthenticated: () => {
         return localStorage.getItem('userInfo') !== null;
