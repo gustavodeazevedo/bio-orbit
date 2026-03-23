@@ -59,11 +59,6 @@ const LoginPage = () => {
       <form onSubmit={handleSubmit} className="login-form">
         {" "}
         <div className="login-logo">
-          <img
-            src="/images/bioorbit-logo.png"
-            alt="BioOrbit Logo"
-            className="logo-image"
-          />
         </div>
         <h2 className="form-title">BioResearch - BioOrbit</h2>
         <p className="form-description">
