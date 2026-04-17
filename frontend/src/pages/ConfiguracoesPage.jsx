@@ -86,11 +86,18 @@ const ConfiguracoesPage = () => {
   useEffect(() => {
     if (!user) return;
 
+    const currentUserProfile = {
+      nome: user.nome || "",
+      email: user.email || "",
+      cargo: user.cargo || "",
+      setor: user.setor || "",
+    };
+
     const changed =
-      formData.nome !== user.nome ||
-      formData.email !== user.email ||
-      formData.cargo !== user.cargo ||
-      formData.setor !== user.setor ||
+      formData.nome !== currentUserProfile.nome ||
+      formData.email !== currentUserProfile.email ||
+      formData.cargo !== currentUserProfile.cargo ||
+      formData.setor !== currentUserProfile.setor ||
       padroesUtilizados !== padroesOriginais ||
       formData.senhaAtual !== "" ||
       formData.novaSenha !== "" ||
@@ -169,11 +176,18 @@ const ConfiguracoesPage = () => {
 
     try {
       // 1. Atualizar dados do usuário (se mudaram)
+      const currentUserProfile = {
+        nome: user.nome || "",
+        email: user.email || "",
+        cargo: user.cargo || "",
+        setor: user.setor || "",
+      };
+
       const userChanged =
-        formData.nome !== user.nome ||
-        formData.email !== user.email ||
-        formData.cargo !== user.cargo ||
-        formData.setor !== user.setor ||
+        formData.nome !== currentUserProfile.nome ||
+        formData.email !== currentUserProfile.email ||
+        formData.cargo !== currentUserProfile.cargo ||
+        formData.setor !== currentUserProfile.setor ||
         formData.novaSenha;
 
       if (userChanged) {
