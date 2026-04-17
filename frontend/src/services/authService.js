@@ -87,6 +87,11 @@ const authService = {
                     ...response.data,
                 })
             );
+
+            // Notifica o AuthContext na mesma aba para atualizar o estado imediatamente
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new Event('userUpdated'));
+            }
         }
 
         return response.data;
