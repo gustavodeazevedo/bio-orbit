@@ -37,7 +37,7 @@ const AIDataExtractor = ({ onDataExtracted, isVisible, onClose }) => {
 
   const handleApplyData = () => {
     if (extractedData && onDataExtracted) {
-      onDataExtracted(extractedData);
+      onDataExtracted(extractedData, inputText);
       setInputText("");
       setExtractedData(null);
       if (onClose) onClose();
