@@ -138,7 +138,7 @@ const AIChatAssistant = ({
       setMessages((prev) => [...prev, newMessage]);
       return newMessage;
     },
-    [createChatMessage]
+    [createChatMessage],
   );
 
   // Scroll automático para última mensagem
@@ -151,7 +151,7 @@ const AIChatAssistant = ({
     const lines = text.split("\n").length;
     return Math.min(
       Math.max(lines, CHAT_CONFIG.MIN_ROWS),
-      CHAT_CONFIG.MAX_ROWS
+      CHAT_CONFIG.MAX_ROWS,
     );
   }, []);
 
@@ -166,7 +166,7 @@ const AIChatAssistant = ({
       setInputMessage(value);
       setInputRows(calculateTextareaRows(value));
     },
-    [calculateTextareaRows]
+    [calculateTextareaRows],
   );
 
   // Handler para teclas pressionadas
@@ -187,8 +187,8 @@ const AIChatAssistant = ({
       extractedData.tipoEquipamento === "repipetador"
         ? "repipetador"
         : extractedData.tipoInstrumento === "multicanal"
-        ? "micropipeta multicanal"
-        : "micropipeta monocanal";
+          ? "micropipeta multicanal"
+          : "micropipeta monocanal";
 
     return (
       `✅ Perfeito! Identifiquei uma **${equipmentType}** da marca **${extractedData.marcaPipeta}**.\n\n` +
@@ -211,7 +211,7 @@ const AIChatAssistant = ({
     async (userInput) => {
       const processingMessage = addMessageToChat(
         "assistant",
-        "🤖 Processando seus dados..."
+        "🤖 Processando seus dados...",
       );
 
       try {
@@ -220,7 +220,7 @@ const AIChatAssistant = ({
 
         // Remover mensagem de processamento
         setMessages((prev) =>
-          prev.filter((m) => m.id !== processingMessage.id)
+          prev.filter((m) => m.id !== processingMessage.id),
         );
 
         // Adicionar mensagem de sucesso
@@ -229,14 +229,14 @@ const AIChatAssistant = ({
 
         // Aplicar dados extraídos
         if (onDataExtracted) {
-          onDataExtracted(extractedData);
+          onDataExtracted(extractedData, userInput);
         }
 
         // Adicionar mensagem final e fechar chat
         setTimeout(() => {
           addMessageToChat(
             "assistant",
-            "🎉 Formulário preenchido com sucesso! Você pode revisar os dados e gerar o certificado."
+            "🎉 Formulário preenchido com sucesso! Você pode revisar os dados e gerar o certificado.",
           );
 
           setTimeout(() => {
@@ -246,14 +246,14 @@ const AIChatAssistant = ({
       } catch (processingError) {
         // Remover mensagem de processamento
         setMessages((prev) =>
-          prev.filter((m) => m.id !== processingMessage.id)
+          prev.filter((m) => m.id !== processingMessage.id),
         );
 
         // Adicionar mensagem de erro específica
         addMessageToChat(
           "assistant",
           `❌ **Ops! Encontrei um problema:**\n\n${processingError.message}\n\n` +
-            `💡 **Dica:** Verifique se os dados estão no formato correto do Notion.`
+            `💡 **Dica:** Verifique se os dados estão no formato correto do Notion.`,
         );
       }
     },
@@ -262,7 +262,7 @@ const AIChatAssistant = ({
       addMessageToChat,
       generateSuccessMessage,
       onDataExtracted,
-    ]
+    ],
   );
 
   // Handler principal para envio de mensagem
@@ -343,7 +343,7 @@ const AIChatAssistant = ({
                   className="w-10 h-10 rounded-full flex items-center justify-center ai-header-logo"
                   style={{
                     background: `linear-gradient(45deg, ${AI_COLORS.GRADIENT_STOPS.join(
-                      ", "
+                      ", ",
                     )})`,
                     backgroundSize: "400% 400%",
                     animation: "ai-gradient-flow 6s ease infinite",
@@ -620,7 +620,8 @@ const AIChatAssistant = ({
         .ai-input-animated {
           border: 2px solid transparent;
           border-radius: 12px;
-          background: linear-gradient(white, white) padding-box,
+          background:
+            linear-gradient(white, white) padding-box,
             linear-gradient(
                 90deg,
                 rgba(144, 199, 45, 0.3) 0%,
@@ -635,7 +636,8 @@ const AIChatAssistant = ({
         }
 
         .ai-input-animated:focus {
-          background: linear-gradient(white, white) padding-box,
+          background:
+            linear-gradient(white, white) padding-box,
             linear-gradient(
                 90deg,
                 rgba(144, 199, 45, 0.6) 0%,
@@ -676,7 +678,7 @@ const AIChatAssistant = ({
         }
       `}</style>
     </>,
-    document.body // Portal renderiza diretamente no body
+    document.body, // Portal renderiza diretamente no body
   );
 };
 

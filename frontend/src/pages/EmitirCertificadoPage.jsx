@@ -19,6 +19,7 @@ import {
   FileDown,
   HelpCircle,
   Info,
+  X,
   Trash2,
   Sparkles,
   Building2,
@@ -39,6 +40,7 @@ import CertificadoCard from "../components/CertificadoCard";
 import useAnimatedInput from "../hooks/useAnimatedInput";
 import { getClienteById } from "../services/clienteService";
 import { formatNumberInput, formatTemperature } from "../utils/formatUtils";
+import { validateNotionAnnotationsPayload } from "../utils/notionAnnotationsValidator";
 import { PDFService } from "../services/pdfService";
 import "../styles/AutomationButton.css";
 import "../styles/AIAnimations.css";
@@ -92,6 +94,7 @@ const EmitirCertificadoPage = () => {
   const [validationErrors, setValidationErrors] = useState({});
   // Estado para controlar erros de anotação (unidades obrigatórias)
   const [annotationErrors, setAnnotationErrors] = useState([]);
+  const [showAnnotationModal, setShowAnnotationModal] = useState(false);
   // Estado para os pontos de calibração
   const [pontosCalibra, setPontosCalibra] = useState([
     {
@@ -123,6 +126,11 @@ const EmitirCertificadoPage = () => {
     mensagem: "",
   });
   const [systemError, setSystemError] = useState(null);
+  const [numerosOrdenacaoUtilizados, setNumerosOrdenacaoUtilizados] = useState(
+    [],
+  );
+  const [seriesUtilizadas, setSeriesUtilizadas] = useState([]);
+  const [identificacoesUtilizadas, setIdentificacoesUtilizadas] = useState([]);
 
   // Estado para controlar se a automação está habilitada
   const [automacaoHabilitada, setAutomacaoHabilitada] = useState(true);
@@ -253,96 +261,36 @@ const EmitirCertificadoPage = () => {
     return null;
   };
 
-  // Função para validar anotações do Notion (unidades obrigatórias)
+  const extrairNumeroOrdenacao = (numeroCertificado = "") => {
+    const match = String(numeroCertificado || "")
+      .trim()
+      .match(/\.(\d+)$/);
+
+    if (!match) return "";
+
+    return String(Number.parseInt(match[1], 10));
+  };
+
+  const normalizarValorUnico = (valor = "") => {
+    const valorNormalizado = String(valor || "")
+      .replace(/\*\*/g, "")
+      .trim()
+      .toUpperCase();
+
+    if (!valorNormalizado || /^(N\/?A|NA)$/i.test(valorNormalizado)) {
+      return "";
+    }
+
+    return valorNormalizado;
+  };
+
+  // Função para validar anotações do Notion com regras robustas
   const validateNotionAnnotations = (extractedData, originalText = "") => {
-    const errors = [];
-
-    console.log("🔍 Validando dados extraídos:", extractedData);
-    console.log("📝 Texto original recebido:", originalText ? "SIM" : "NÃO");
-    console.log("📝 Tamanho do texto:", originalText.length);
-
-    // ESTRATÉGIA 1: Verificar se as unidades já estão nos dados extraídos
-    if (
-      extractedData.unidadeCapacidade &&
-      (extractedData.unidadeCapacidade === "µL" ||
-        extractedData.unidadeCapacidade === "mL")
-    ) {
-      console.log(
-        "✅ Unidade de capacidade encontrada nos dados extraídos:",
-        extractedData.unidadeCapacidade,
-      );
-    }
-
-    if (
-      extractedData.unidadeFaixaIndicacao &&
-      (extractedData.unidadeFaixaIndicacao === "µL" ||
-        extractedData.unidadeFaixaIndicacao === "mL")
-    ) {
-      console.log(
-        "✅ Unidade de faixa indicação encontrada nos dados extraídos:",
-        extractedData.unidadeFaixaIndicacao,
-      );
-    }
-
-    if (
-      extractedData.unidadeFaixaCalibrada &&
-      (extractedData.unidadeFaixaCalibrada === "µL" ||
-        extractedData.unidadeFaixaCalibrada === "mL")
-    ) {
-      console.log(
-        "✅ Unidade de faixa calibrada encontrada nos dados extraídos:",
-        extractedData.unidadeFaixaCalibrada,
-      );
-    }
-
-    // Se as unidades estão presentes nos dados extraídos, a validação passou
-    if (
-      extractedData.unidadeCapacidade ||
-      extractedData.unidadeFaixaIndicacao ||
-      extractedData.unidadeFaixaCalibrada
-    ) {
-      console.log("✅ Unidades encontradas nos dados extraídos - validação OK");
-      return []; // Sem erros
-    }
-
-    // ESTRATÉGIA 2: Se não há texto original, não podemos validar - assumir que está correto
-    if (!originalText || originalText.trim().length === 0) {
-      console.log(
-        "⚠️ Sem texto original e sem unidades extraídas - assumindo validação OK",
-      );
-      return []; // Sem erros por enquanto
-    }
-
-    // ESTRATÉGIA 3: Validar pelo texto original
-    const volumePattern = /VOLUME:\s*.*?(ul|ml)/i;
-    const volumeMatch = volumePattern.test(originalText);
-    console.log("📊 VOLUME pattern match:", volumeMatch);
-    if (!volumeMatch) {
-      errors.push(
-        "VOLUME deve incluir unidade (ul ou ml). Exemplo: 'VOLUME: 100ul'",
-      );
-    }
-
-    const indicacaoPattern = /PONTOS DE INDICA[CÇ][AÃ]O:\s*.*?(ul|ml)/i;
-    const indicacaoMatch = indicacaoPattern.test(originalText);
-    console.log("📈 PONTOS DE INDICAÇÃO pattern match:", indicacaoMatch);
-    if (!indicacaoMatch) {
-      errors.push(
-        "PONTOS DE INDICAÇÃO deve incluir unidade (ul ou ml). Exemplo: 'PONTOS DE INDICAÇÃO: 10-100ul'",
-      );
-    }
-
-    const calibradosPattern = /PONTOS CALIBRADOS:\s*.*?(ul|ml)/i;
-    const calibradosMatch = calibradosPattern.test(originalText);
-    console.log("🎯 PONTOS CALIBRADOS pattern match:", calibradosMatch);
-    if (!calibradosMatch) {
-      errors.push(
-        "PONTOS CALIBRADOS deve incluir unidade (ul ou ml). Exemplo: 'PONTOS CALIBRADOS: 10-100ul'",
-      );
-    }
-
-    console.log("❌ Errors found:", errors);
-    return errors;
+    return validateNotionAnnotationsPayload(extractedData, originalText, {
+      existingOrderNumbers: numerosOrdenacaoUtilizados,
+      existingSeries: seriesUtilizadas,
+      existingIdentifications: identificacoesUtilizadas,
+    });
   }; // Buscar dados do cliente se não foram passados pelo location state
   useEffect(() => {
     const fetchClienteData = async () => {
@@ -719,6 +667,13 @@ const EmitirCertificadoPage = () => {
   const handleSubmit = (e) => {
     e.preventDefault();
     setSystemError(null);
+    const numeroOrdenacaoAtual = extrairNumeroOrdenacao(
+      formData.numeroCertificado,
+    );
+    const serieAtual = normalizarValorUnico(formData.numeroPipeta);
+    const identificacaoAtual = normalizarValorUnico(
+      formData.numeroIdentificacao,
+    );
 
     // Validar o número do certificado antes de gerar o PDF
     // Usar allowCompleteFormat=true para aceitar formato completo (1234.1)
@@ -774,16 +729,109 @@ const EmitirCertificadoPage = () => {
 
     // Verificar se há erros de anotação pendentes
     if (annotationErrors.length > 0) {
-      setSystemError({
-        title: "Não foi possível gerar o certificado",
-        description:
-          "As anotações do Notion devem incluir unidades (ul ou ml). Corrija e tente novamente.",
-      });
+      setShowAnnotationModal(true);
       return; // Impede a geração do certificado
+    }
+
+    if (
+      numeroOrdenacaoAtual &&
+      numerosOrdenacaoUtilizados.includes(numeroOrdenacaoAtual)
+    ) {
+      const errorNumeroOrdenacao = `Nº DE ORDENAÇÃO ${numeroOrdenacaoAtual} já foi utilizado nesta sessão.`;
+
+      setValidationErrors((prevErrors) => ({
+        ...prevErrors,
+        numeroCertificado: errorNumeroOrdenacao,
+      }));
+
+      setSystemError({
+        title: "Número de ordenação duplicado",
+        description: errorNumeroOrdenacao,
+      });
+
+      const inputElement = document.querySelector(
+        'input[name="numeroCertificado"]',
+      );
+      if (inputElement) {
+        inputElement.focus();
+      }
+
+      return;
+    }
+
+    if (serieAtual && seriesUtilizadas.includes(serieAtual)) {
+      const errorSerie = `SÉRIE ${serieAtual} já foi utilizada nesta sessão.`;
+
+      setValidationErrors((prevErrors) => ({
+        ...prevErrors,
+        numeroPipeta: errorSerie,
+      }));
+
+      setSystemError({
+        title: "Série duplicada",
+        description: errorSerie,
+      });
+
+      const inputElement = document.querySelector('input[name="numeroPipeta"]');
+      if (inputElement) {
+        inputElement.focus();
+      }
+
+      return;
+    }
+
+    if (
+      identificacaoAtual &&
+      identificacoesUtilizadas.includes(identificacaoAtual)
+    ) {
+      const errorIdentificacao = `Nº DE IDENTIFICAÇÃO ${identificacaoAtual} já foi utilizado nesta sessão.`;
+
+      setValidationErrors((prevErrors) => ({
+        ...prevErrors,
+        numeroIdentificacao: errorIdentificacao,
+      }));
+
+      setSystemError({
+        title: "Número de identificação duplicado",
+        description: errorIdentificacao,
+      });
+
+      const inputElement = document.querySelector(
+        'input[name="numeroIdentificacao"]',
+      );
+      if (inputElement) {
+        inputElement.focus();
+      }
+
+      return;
     }
 
     // Aqui seria implementada a lógica para gerar o PDF do certificado
     // usando os dados do cliente e os dados do formulário
+
+    if (numeroOrdenacaoAtual) {
+      setNumerosOrdenacaoUtilizados((previousNumbers) =>
+        previousNumbers.includes(numeroOrdenacaoAtual)
+          ? previousNumbers
+          : [...previousNumbers, numeroOrdenacaoAtual],
+      );
+    }
+
+    if (serieAtual) {
+      setSeriesUtilizadas((previousSeries) =>
+        previousSeries.includes(serieAtual)
+          ? previousSeries
+          : [...previousSeries, serieAtual],
+      );
+    }
+
+    if (identificacaoAtual) {
+      setIdentificacoesUtilizadas((previousIdentifications) =>
+        previousIdentifications.includes(identificacaoAtual)
+          ? previousIdentifications
+          : [...previousIdentifications, identificacaoAtual],
+      );
+    }
 
     setCertificadoGerado(true);
 
@@ -1007,18 +1055,13 @@ const EmitirCertificadoPage = () => {
     // Se houver erros de anotação, mostrar e bloquear processo
     if (annotationValidationErrors.length > 0) {
       setAnnotationErrors(annotationValidationErrors);
-
-      setSystemError({
-        title: "Anotações do Notion incompletas",
-        description:
-          "Inclua unidades (ul ou ml) nas anotações para prosseguir com a automação.",
-      });
-
+      setShowAnnotationModal(true);
       return; // Bloqueia o processamento
     }
 
     // Limpar erros de anotação se tudo estiver correto
     setAnnotationErrors([]);
+    setShowAnnotationModal(false);
 
     // Preparar dados para animação
     const fieldsToAnimate = [];
@@ -2294,6 +2337,48 @@ const EmitirCertificadoPage = () => {
         backgroundColor: "rgb(249, 250, 251)",
       }}
     >
+      {showAnnotationModal && annotationErrors.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 bg-black/30 backdrop-blur-sm"
+            onClick={() => setShowAnnotationModal(false)}
+          ></div>
+          <div className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-border flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-foreground">
+                  Anotações do Notion com inconsistencias
+                </h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Revise antes de prosseguir.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowAnnotationModal(false)}
+                className="hover:bg-muted p-2 rounded-lg transition-colors"
+                title="Fechar"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <ul className="list-disc list-inside space-y-1 text-sm text-foreground">
+                {annotationErrors.map((error, index) => (
+                  <li key={`${error}-${index}`}>{error}</li>
+                ))}
+              </ul>
+            </div>
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border">
+              <button
+                onClick={() => setShowAnnotationModal(false)}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors font-medium"
+              >
+                Entendi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div
         className={`${
           certificadoGerado
@@ -2368,51 +2453,6 @@ const EmitirCertificadoPage = () => {
             className="space-y-6"
             ref={formRef}
           >
-            {/* Seção de Erros de Anotação */}
-            {annotationErrors.length > 0 && (
-              <div className="bg-red-50 border-l-4 border-red-400 p-4 rounded-r-lg">
-                <div className="flex items-start">
-                  <div className="flex-shrink-0">
-                    <svg
-                      className="h-5 w-5 text-red-400"
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                    >
-                      <path
-                        fillRule="evenodd"
-                        d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                  </div>
-                  <div className="ml-3">
-                    <h3 className="text-sm font-medium text-red-800">
-                      ❌ Anotações do Notion Incompletas
-                    </h3>
-                    <div className="mt-2 text-sm text-red-700">
-                      <p className="mb-2">
-                        As seguintes informações devem incluir unidades (ul ou
-                        ml):
-                      </p>
-                      <ul className="list-disc list-inside space-y-1">
-                        {annotationErrors.map((error, index) => (
-                          <li key={index}>{error}</li>
-                        ))}
-                      </ul>
-                      <div className="mt-3 p-2 bg-red-100 rounded text-xs">
-                        <strong>📝 Formato correto:</strong>
-                        <br />
-                        VOLUME: 100ul
-                        <br />
-                        PONTOS DE INDICAÇÃO: 10-100ul
-                        <br />
-                        PONTOS CALIBRADOS: 10-100ul
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}{" "}
             <SectionCard title="Dados do Certificado" variant="default">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormInput

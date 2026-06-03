@@ -40,3 +40,6 @@ Thumbs.db
 
 # Pasta de contexto local
 context/
+
+# Arquivo de engenharia de contexto
+/COPILOT.md
