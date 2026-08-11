@@ -21,6 +21,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "file-saver": "^2.0.5",
+    "jszip": "^3.10.1",
     "lucide-react": "^0.514.0",
     "pdfmake": "^0.2.20",
     "react": "^18.2.0",

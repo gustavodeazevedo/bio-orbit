@@ -42,6 +42,8 @@ import { getClienteById } from "../services/clienteService";
 import { formatNumberInput, formatTemperature } from "../utils/formatUtils";
 import { validateNotionAnnotationsPayload } from "../utils/notionAnnotationsValidator";
 import { PDFService } from "../services/pdfService";
+import JSZip from "jszip";
+import { saveAs } from "file-saver";
 import "../styles/AutomationButton.css";
 import "../styles/AIAnimations.css";
 import "../styles/AIAnimatedInputs.css";
@@ -89,7 +91,11 @@ const EmitirCertificadoPage = () => {
     condicoesAmbientaisControladas: true,
   });
   const [certificadoGerado, setCertificadoGerado] = useState(false); // Fator Z calculado com base na temperatura
-  const [fatorZ, setFatorZ] = useState(1.0029); // Valor padrão para 20°C
+  const [fatorZ, setFatorZ] = useState(1.0029);
+  const [isBatchMode, setIsBatchMode] = useState(false);
+  const [batchData, setBatchData] = useState([]);
+  const [isProcessingBatch, setIsProcessingBatch] = useState(false);
+  const [batchProgress, setBatchProgress] = useState(0); // Valor padrão para 20°C
   // Estado para controlar erros de validação
   const [validationErrors, setValidationErrors] = useState({});
   // Estado para controlar erros de anotação (unidades obrigatórias)
@@ -137,6 +143,16 @@ const EmitirCertificadoPage = () => {
 
   // Estado para exibir/esconder a seção de cálculos
   const [mostrarCalculos, setMostrarCalculos] = useState(false);
+
+  useEffect(() => {
+    if (!isBatchMode) {
+      setBatchData([]);
+      setBatchProgress(0);
+      setIsProcessingBatch(false);
+      setAnnotationErrors([]);
+      setShowAnnotationModal(false);
+    }
+  }, [isBatchMode]);
 
   // Hook para animação de inputs
   const {
@@ -282,6 +298,320 @@ const EmitirCertificadoPage = () => {
     }
 
     return valorNormalizado;
+  };
+
+  const normalizarNomeArquivo = (valor = "", fallback = "Certificados") => {
+    const nomeNormalizado = String(valor || fallback)
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-zA-Z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+
+    return nomeNormalizado || fallback;
+  };
+
+  const dividirAnotacoesEmLote = (texto = "") =>
+    String(texto || "")
+      .replace(/\r\n/g, "\n")
+      .split(/(?=^\s*INSTRUMENTO\s*:)/gim)
+      .map((bloco) => bloco.trim())
+      .filter(Boolean);
+
+  const validarBlocoAnotacaoLote = (blocoTexto = "", indice = 0) => {
+    const erros = [];
+    const linhasCalibracao = [
+      ...String(blocoTexto || "").matchAll(
+        /^\s*-\s*(\d+(?:[.,]\d+)?)\s*=\s*([^\n\r]*)/gm,
+      ),
+    ];
+
+    if (linhasCalibracao.length === 0) {
+      erros.push(
+        `Anotação ${indice}: nenhum ponto de calibração foi encontrado.`,
+      );
+      return erros;
+    }
+
+    linhasCalibracao.forEach((match, pontoIndex) => {
+      const valores = String(match[2] || "")
+        .split(",")
+        .map((valor) => valor.trim())
+        .filter((valor) => /^-?\d+(?:[.,]\d+)?$/.test(valor));
+
+      if (valores.length !== 10) {
+        erros.push(
+          `Anotação ${indice}: ponto ${pontoIndex + 1} (${match[1]}) deve ter 10 medições válidas, mas recebeu ${valores.length}.`,
+        );
+      }
+    });
+
+    return erros;
+  };
+
+  const validarLoteDeAnotacoes = (extractedItems = [], originalText = "") => {
+    const blocos = dividirAnotacoesEmLote(originalText);
+    const erros = [];
+    const contextoValidacao = {
+      existingOrderNumbers: numerosOrdenacaoUtilizados,
+      existingSeries: seriesUtilizadas,
+      existingIdentifications: identificacoesUtilizadas,
+    };
+
+    if (!Array.isArray(extractedItems) || extractedItems.length === 0) {
+      return [
+        "Nenhum certificado foi identificado para processamento em lote.",
+      ];
+    }
+
+    if (blocos.length > 0 && blocos.length !== extractedItems.length) {
+      erros.push(
+        `O texto enviado contém ${blocos.length} bloco(s) de anotação, mas a IA retornou ${extractedItems.length} certificado(s). Revise o conteúdo antes de continuar.`,
+      );
+    }
+
+    extractedItems.forEach((item, index) => {
+      const bloco = blocos[index] || originalText;
+      const errosEstruturais = validarBlocoAnotacaoLote(bloco, index + 1);
+      if (errosEstruturais.length > 0) {
+        erros.push(...errosEstruturais);
+      }
+
+      const errosDoItem = validateNotionAnnotationsPayload(
+        item,
+        bloco,
+        contextoValidacao,
+      );
+
+      if (errosDoItem.length > 0) {
+        erros.push(`Anotação ${index + 1}: ${errosDoItem.join(" ")}`);
+      }
+
+      const numeroOrdenacaoAtual = extrairNumeroOrdenacao(
+        item?.numeroCertificado,
+      );
+      const serieAtual = normalizarValorUnico(item?.numeroPipeta);
+      const identificacaoAtual = normalizarValorUnico(
+        item?.numeroIdentificacao,
+      );
+
+      if (numeroOrdenacaoAtual) {
+        contextoValidacao.existingOrderNumbers = [
+          ...contextoValidacao.existingOrderNumbers,
+          numeroOrdenacaoAtual,
+        ];
+      }
+
+      if (serieAtual) {
+        contextoValidacao.existingSeries = [
+          ...contextoValidacao.existingSeries,
+          serieAtual,
+        ];
+      }
+
+      if (identificacaoAtual) {
+        contextoValidacao.existingIdentifications = [
+          ...contextoValidacao.existingIdentifications,
+          identificacaoAtual,
+        ];
+      }
+    });
+
+    return [...new Set(erros)];
+  };
+
+  const calcularPontoParaLote = (ponto, fatorConversaoAtual) => {
+    const medicoesValidas = Array.isArray(ponto?.medicoes)
+      ? ponto.medicoes
+          .map((medicao) => parseFloat(medicao))
+          .filter((medicao) => !Number.isNaN(medicao))
+      : [];
+
+    if (medicoesValidas.length === 0) {
+      return {
+        ...ponto,
+        media: null,
+        mediaMassa: null,
+        inexatidao: null,
+        inexatidaoPercentual: null,
+        desvioPadrao: null,
+        coeficienteVariacao: null,
+      };
+    }
+
+    const mediaMassa = calcularMedia(ponto.medicoes);
+    const media = calcularMedia(ponto.medicoes, fatorConversaoAtual);
+    const desvioPadrao = calcularDesvioPadrao(
+      ponto.medicoes,
+      media,
+      fatorConversaoAtual,
+    );
+    const volumeNominal = parseFloat(ponto.volumeNominal);
+    const inexatidao =
+      Number.isFinite(volumeNominal) && media !== null
+        ? media - volumeNominal
+        : null;
+    const inexatidaoPercentual =
+      inexatidao !== null &&
+      Number.isFinite(volumeNominal) &&
+      volumeNominal !== 0
+        ? (inexatidao / volumeNominal) * 100
+        : null;
+    const coeficienteVariacao =
+      media !== null && media !== 0 && desvioPadrao !== null
+        ? (desvioPadrao / media) * 100
+        : null;
+
+    return {
+      ...ponto,
+      media: media !== null ? parseFloat(media.toFixed(2)) : null,
+      mediaMassa:
+        mediaMassa !== null ? parseFloat(mediaMassa.toFixed(2)) : null,
+      inexatidao:
+        inexatidao !== null ? parseFloat(inexatidao.toFixed(2)) : null,
+      inexatidaoPercentual:
+        inexatidaoPercentual !== null
+          ? parseFloat(inexatidaoPercentual.toFixed(2))
+          : null,
+      desvioPadrao:
+        desvioPadrao !== null ? parseFloat(desvioPadrao.toFixed(2)) : null,
+      coeficienteVariacao:
+        coeficienteVariacao !== null
+          ? parseFloat(coeficienteVariacao.toFixed(2))
+          : null,
+    };
+  };
+
+  const expandirPontosMulticanaisParaLote = (item) => {
+    const pontosBase = Array.isArray(item?.pontosCalibra)
+      ? item.pontosCalibra
+      : [];
+
+    if (item?.tipoInstrumento !== "multicanal") {
+      return pontosBase.map((ponto) => calcularPontoParaLote(ponto, fatorZ));
+    }
+
+    const totalCanais = Number(item?.quantidadeCanais) || 1;
+    const pontosExpandidos = [];
+
+    for (let canal = 1; canal <= totalCanais; canal++) {
+      pontosBase.forEach((pontoBase, index) => {
+        const medicoesBase = Array.isArray(pontoBase?.medicoes)
+          ? pontoBase.medicoes
+          : [];
+
+        const medicoesDoCanal =
+          canal === 1
+            ? medicoesBase
+            : medicoesBase.map((valor) =>
+                valor === "" ? "" : gerarValoresProximos(valor),
+              );
+
+        pontosExpandidos.push(
+          calcularPontoParaLote(
+            {
+              ...pontoBase,
+              id: `${canal}-${index + 1}-${Date.now()}`,
+              canal,
+              pontoPosicao: index + 1,
+              medicoes: medicoesDoCanal,
+              valoresTexto: medicoesDoCanal.filter(Boolean).join(", "),
+            },
+            fatorZ,
+          ),
+        );
+      });
+    }
+
+    return pontosExpandidos;
+  };
+
+  const calcularPontoSeringaParaLote = (ponto) => {
+    const medicoesValidas = Array.isArray(ponto?.medicoes)
+      ? ponto.medicoes
+          .map((medicao) => parseFloat(medicao))
+          .filter((medicao) => !Number.isNaN(medicao))
+      : [];
+
+    if (medicoesValidas.length === 0) {
+      return {
+        ...ponto,
+        media: null,
+        mediaMassa: null,
+        inexatidao: null,
+        inexatidaoPercentual: null,
+        desvioPadrao: null,
+        coeficienteVariacao: null,
+      };
+    }
+
+    const mediaMassa =
+      medicoesValidas.reduce((sum, val) => sum + val, 0) /
+      medicoesValidas.length;
+    const volumesIndividuais = medicoesValidas.map((massa) => massa * fatorZ);
+    const mediaVolume =
+      volumesIndividuais.reduce((sum, vol) => sum + vol, 0) /
+      volumesIndividuais.length;
+    const volumeNominalNum = parseFloat(ponto?.volumeNominal);
+    const inexatidao = Number.isFinite(volumeNominalNum)
+      ? mediaVolume - volumeNominalNum
+      : null;
+    const inexatidaoPercentual =
+      inexatidao !== null &&
+      Number.isFinite(volumeNominalNum) &&
+      volumeNominalNum !== 0
+        ? (inexatidao / volumeNominalNum) * 100
+        : null;
+    const somaDosQuadradosDasDiferencas = volumesIndividuais.reduce(
+      (sum, vol) => sum + Math.pow(vol - mediaVolume, 2),
+      0,
+    );
+    const desvioPadrao =
+      volumesIndividuais.length > 1
+        ? Math.sqrt(
+            somaDosQuadradosDasDiferencas / (volumesIndividuais.length - 1),
+          )
+        : 0;
+    const coeficienteVariacao =
+      mediaVolume !== 0 ? (desvioPadrao / mediaVolume) * 100 : 0;
+
+    return {
+      ...ponto,
+      media: parseFloat(mediaVolume.toFixed(2)),
+      mediaMassa: parseFloat(mediaMassa.toFixed(2)),
+      inexatidao: parseFloat((inexatidao || 0).toFixed(2)),
+      inexatidaoPercentual: parseFloat((inexatidaoPercentual || 0).toFixed(2)),
+      desvioPadrao: parseFloat(desvioPadrao.toFixed(2)),
+      coeficienteVariacao: parseFloat(coeficienteVariacao.toFixed(2)),
+    };
+  };
+
+  const expandirSeringasParaLote = (item) => {
+    const seringasBase = Array.isArray(item?.seringas) ? item.seringas : [];
+
+    return seringasBase.map((seringa) => ({
+      ...seringa,
+      pontosCalibra: Array.isArray(seringa?.pontosCalibra)
+        ? seringa.pontosCalibra.map((ponto) =>
+            calcularPontoSeringaParaLote(ponto),
+          )
+        : [],
+    }));
+  };
+
+  const prepararDadosLoteParaPDF = (item) => {
+    if (item.tipoEquipamento === "repipetador") {
+      const seringasCalculadas = expandirSeringasParaLote(item);
+      return {
+        dadosParaPDF: seringasCalculadas,
+        seringasParaPDF: seringasCalculadas,
+      };
+    }
+
+    const pontosParaPDF = expandirPontosMulticanaisParaLote(item);
+    return {
+      dadosParaPDF: pontosParaPDF,
+      seringasParaPDF: null,
+    };
   };
 
   // Função para validar anotações do Notion com regras robustas
@@ -929,6 +1259,80 @@ const EmitirCertificadoPage = () => {
     }
   };
 
+  // Função para gerar os PDFs em lote e baixar um arquivo ZIP
+  const handleGerarCertificadosLote = async () => {
+    setIsProcessingBatch(true);
+    setBatchProgress(0);
+    setSystemError(null);
+
+    try {
+      const zip = new JSZip();
+      const nomeBaseZip = normalizarNomeArquivo(cliente?.nome, "Certificados");
+
+      for (let i = 0; i < batchData.length; i++) {
+        const item = batchData[i];
+        const { dadosParaPDF, seringasParaPDF } =
+          prepararDadosLoteParaPDF(item);
+
+        // Unir dados manuais com dados extraídos
+        const formDataParaPDF = {
+          ...formData,
+          tipoEquipamento: item.tipoEquipamento,
+          tipoInstrumento: item.tipoInstrumento,
+          marcaPipeta: item.marcaPipeta,
+          modeloPipeta: item.modeloPipeta,
+          numeroPipeta: item.numeroPipeta,
+          numeroIdentificacao: item.numeroIdentificacao,
+          // Se o item já tiver número de certificado extraído, usar. Caso contrário, usar o base ou incrementar
+          numeroCertificado: item.numeroCertificado
+            ? `${formData.numeroCertificado}${item.numeroCertificado}`
+            : `${formData.numeroCertificado}-${i + 1}`,
+          capacidade: item.capacidade,
+          unidadeCapacidade: item.unidadeCapacidade,
+          faixaIndicacao: item.faixaIndicacao,
+          unidadeFaixaIndicacao: item.unidadeFaixaIndicacao,
+          faixaCalibrada: item.faixaCalibrada,
+          unidadeFaixaCalibrada: item.unidadeFaixaCalibrada,
+          quantidadeCanais: item.quantidadeCanais || 1,
+        };
+
+        const pdf = await PDFService.gerarCertificadoCalibracao(
+          formDataParaPDF,
+          cliente,
+          dadosParaPDF,
+          fatorZ,
+          seringasParaPDF,
+          padroesUtilizados,
+        );
+
+        // Obter buffer do PDF
+        const pdfBuffer = await new Promise((resolve, reject) => {
+          pdf.getBuffer((buffer) => resolve(buffer));
+        });
+
+        // Adicionar ao ZIP
+        const fileName = normalizarNomeArquivo(
+          `Certificado_${formDataParaPDF.numeroCertificado}_${formDataParaPDF.numeroPipeta}`,
+          `Certificado_${i + 1}`,
+        );
+        zip.file(`${fileName}.pdf`, pdfBuffer);
+
+        setBatchProgress(Math.round(((i + 1) / batchData.length) * 100));
+      }
+
+      const zipContent = await zip.generateAsync({ type: "blob" });
+      saveAs(zipContent, `${nomeBaseZip}.zip`);
+    } catch (error) {
+      console.error("Erro ao gerar lote de certificados:", error);
+      setSystemError({
+        title: "Erro ao gerar lote",
+        description: "Ocorreu um erro ao gerar o arquivo ZIP. Tente novamente.",
+      });
+    } finally {
+      setIsProcessingBatch(false);
+    }
+  };
+
   // Função para disparar automação após preenchimento da IA
   const triggerAutomacaoParaIA = (pontosIA) => {
     setAutoPreenchimento({
@@ -989,6 +1393,58 @@ const EmitirCertificadoPage = () => {
 
   // Função para processar dados extraídos pela IA
   const handleDataExtracted = async (extractedData, originalText = "") => {
+    if (isBatchMode) {
+      if (!Array.isArray(extractedData)) {
+        setSystemError({
+          title: "Erro no processamento em lote",
+          description:
+            "Os dados retornados não estão no formato esperado para lote.",
+        });
+        return;
+      }
+
+      const annotationValidationErrors = validarLoteDeAnotacoes(
+        extractedData,
+        originalText,
+      );
+
+      if (annotationValidationErrors.length > 0) {
+        setAnnotationErrors(annotationValidationErrors);
+        setShowAnnotationModal(true);
+        setBatchData([]);
+        setIsProcessingBatch(false);
+        return;
+      }
+
+      setAnnotationErrors([]);
+      setShowAnnotationModal(false);
+
+      // Impede o fluxo da IA sem número do certificado base preenchido
+      const numeroCertificadoError = validateNumeroCertificado(
+        formData.numeroCertificado,
+        false,
+      );
+      const dataCalibracaoError = validateDataCalibracao(
+        formData.dataCalibracao,
+      );
+
+      if (numeroCertificadoError || dataCalibracaoError) {
+        setSystemError({
+          title: "Campos obrigatórios pendentes",
+          description:
+            "Preencha corretamente o 'Número do Certificado' e a 'Data da Calibração' antes de gerar em lote.",
+        });
+        return;
+      }
+
+      setIsProcessingBatch(true);
+      setBatchProgress(0);
+      setBatchData(extractedData);
+
+      setIsProcessingBatch(false);
+      return;
+    }
+
     // Se a animação estiver desabilitada, usar método antigo
     if (isAnimating) {
       stopAnimation();
@@ -2487,6 +2943,30 @@ const EmitirCertificadoPage = () => {
                     name="dataCalibracao"
                     value={formData.dataCalibracao}
                     onChange={handleChange}
+                    onClick={(e) => {
+                      if (typeof e.currentTarget.showPicker === "function") {
+                        e.currentTarget.showPicker();
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      const allowedKeys = [
+                        "Tab",
+                        "Shift",
+                        "Control",
+                        "Alt",
+                        "Meta",
+                        "Escape",
+                        "ArrowLeft",
+                        "ArrowRight",
+                        "ArrowUp",
+                        "ArrowDown",
+                      ];
+
+                      if (!allowedKeys.includes(e.key)) {
+                        e.preventDefault();
+                      }
+                    }}
+                    onPaste={(e) => e.preventDefault()}
                     placeholder="Selecione a data da calibração"
                     className="w-full px-3 py-2 border border-gray-300 rounded-md transition-colors duration-200 ease-in-out focus:border-green-500 focus:outline-none"
                     style={{
@@ -2608,542 +3088,954 @@ const EmitirCertificadoPage = () => {
                 </div>
               </div>{" "}
             </SectionCard>{" "}
-            <div className="p-4 rounded-md border border-gray-200">
-              {" "}
-              <h3
-                className="text-lg font-semibold mb-3 py-2 px-3 relative"
-                style={{
-                  color: "rgb(75, 85, 99)",
-                }}
-              >
-                <div
-                  className="absolute left-0 top-0 bottom-0 w-1 rounded-full"
-                  style={{
-                    background:
-                      "linear-gradient(180deg, rgb(144, 199, 45), rgb(120, 170, 35))",
-                  }}
-                />
-                Dados{" "}
-                {formData.tipoEquipamento === "micropipeta"
-                  ? "da Micropipeta"
-                  : formData.tipoEquipamento === "bureta"
-                    ? "da Bureta"
-                    : "do Repipetador"}
-              </h3>{" "}
-              {/* Seletor de tipo de equipamento */}
-              <RadioGroup
-                name="tipoEquipamento"
-                value={formData.tipoEquipamento}
-                onChange={handleChange}
-                label="Tipo de Equipamento"
-                required
-                variant="equipamento"
-                options={[
-                  {
-                    value: "micropipeta",
-                    label: "Micropipeta",
-                  },
-                  {
-                    value: "bureta",
-                    label: "Bureta",
-                  },
-                  {
-                    value: "repipetador",
-                    label: "Repipetador",
-                  },
-                ]}
-              />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {" "}
-                <FormInput
-                  label={`Marca ${
-                    formData.tipoEquipamento === "micropipeta"
-                      ? "da Pipeta"
-                      : formData.tipoEquipamento === "bureta"
-                        ? "da Bureta"
-                        : "do Repipetador"
-                  }`}
-                  name="marcaPipeta"
-                  value={formData.marcaPipeta}
-                  onChange={handleChange}
-                  placeholder={
-                    formData.tipoEquipamento === "micropipeta"
-                      ? "Ex: Eppendorf, Gilson, HTL, etc."
-                      : "Ex: Eppendorf, Brand, Rainin, etc."
-                  }
-                />{" "}
-                <FormInput
-                  label={`Modelo ${
-                    formData.tipoEquipamento === "micropipeta"
-                      ? "da Pipeta"
-                      : "do Repipetador"
-                  }`}
-                  name="modeloPipeta"
-                  value={formData.modeloPipeta}
-                  onChange={handleChange}
-                  placeholder={
-                    formData.tipoEquipamento === "micropipeta"
-                      ? "Ex: P1000, Research Plus, etc."
-                      : formData.tipoEquipamento === "bureta"
-                        ? "Ex: B25, B50, Bureta Digital, etc."
-                        : "Ex: Multipette E3x, Repeater M4, etc."
-                  }
-                />{" "}
-                <FormInput
-                  label={`Número/Série ${
-                    formData.tipoEquipamento === "micropipeta"
-                      ? "da Pipeta"
-                      : formData.tipoEquipamento === "bureta"
-                        ? "da Bureta"
-                        : "do Repipetador"
-                  }`}
-                  name="numeroPipeta"
-                  value={formData.numeroPipeta}
-                  onChange={handleChange}
-                  placeholder="Ex: AJ12345"
-                />
-                <FormInput
-                  label="Nº de Identificação"
-                  name="numeroIdentificacao"
-                  value={formData.numeroIdentificacao}
-                  onChange={handleChange}
-                  placeholder="Ex: ID001, BIO123, etc. (opcional)"
-                />{" "}
-                {/* Campo Volume - apenas para micropipetas e buretas */}
-                {(formData.tipoEquipamento === "micropipeta" ||
-                  formData.tipoEquipamento === "bureta") && (
-                  <VolumeInput
-                    label="Volume"
-                    volumeName="capacidade"
-                    unitName="unidadeCapacidade"
-                    volumeValue={formData.capacidade}
-                    unitValue={formData.unidadeCapacidade}
-                    onChange={handleChange}
-                    placeholder="Ex: 1000"
-                    required
-                  />
-                )}{" "}
-                {/* Tipo de Instrumento - só aparece para micropipetas */}
-                {formData.tipoEquipamento === "micropipeta" && (
-                  <div className="space-y-4">
-                    {" "}
-                    <RadioGroup
-                      name="tipoInstrumento"
-                      value={formData.tipoInstrumento}
-                      onChange={handleChange}
-                      label="Tipo de Instrumento"
-                      required
-                      variant="inline"
-                      options={[
-                        {
-                          value: "monocanal",
-                          label: "Monocanal",
-                        },
-                        {
-                          value: "multicanal",
-                          label: "Multicanal",
-                        },
-                      ]}
-                    />
-                    {/* Seleção de quantidade de canais - só aparece quando multicanal está selecionado */}
-                    {formData.tipoInstrumento === "multicanal" && (
-                      <div className="mt-3 space-y-4">
-                        <div className="p-3 bg-gray-50 rounded-md border border-gray-200">
-                          <label
-                            className="block text-sm font-medium mb-2"
-                            style={{ color: "rgb(75, 85, 99)" }}
-                          >
-                            Quantidade de Canais
-                          </label>
-                          <RadioGroup
-                            name="quantidadeCanais"
-                            value={quantidadeCanais.toString()}
-                            onChange={(e) =>
-                              handleQuantidadeCanaisChange(
-                                parseInt(e.target.value),
-                              )
-                            }
-                            variant="canais"
-                            options={[
-                              {
-                                value: "8",
-                                label: "8 Canais",
-                              },
-                              {
-                                value: "12",
-                                label: "12 Canais",
-                              },
-                            ]}
-                          />
-                        </div>
-
-                        {/* Configuração de pontos por canal */}
-                        <div className="p-3 bg-gray-50 rounded-md border border-gray-200">
-                          <div className="flex items-center justify-between mb-2">
-                            <label
-                              className="block text-sm font-medium"
-                              style={{ color: "rgb(75, 85, 99)" }}
-                            >
-                              Pontos de Calibração por Canal
-                            </label>
-                          </div>
-                          <div className="flex items-center space-x-3">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handlePontosPorCanalChange(
-                                  Math.max(1, pontosPorCanal - 1),
-                                )
-                              }
-                              className="flex items-center justify-center w-8 h-8 bg-white border border-gray-300 rounded-md hover:bg-gray-50 text-gray-600 transition-colors"
-                              disabled={pontosPorCanal <= 1}
-                            >
-                              <Minus size={16} />
-                            </button>
-                            <span className="px-3 py-1 bg-white border border-gray-300 rounded-md text-center font-medium min-w-[3rem]">
-                              {pontosPorCanal}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handlePontosPorCanalChange(
-                                  Math.min(10, pontosPorCanal + 1),
-                                )
-                              }
-                              className="flex items-center justify-center w-8 h-8 bg-white border border-gray-300 rounded-md hover:bg-gray-50 text-gray-600 transition-colors"
-                              disabled={pontosPorCanal >= 10}
-                            >
-                              <Plus size={16} />
-                            </button>
-                            <span className="text-sm text-gray-600">
-                              pontos por canal
-                            </span>
-                          </div>
-                          <p className="text-xs text-gray-600 mt-2">
-                            Cada canal terá {pontosPorCanal} ponto
-                            {pontosPorCanal !== 1 ? "s" : ""} de calibração
-                            inicialmente.
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}{" "}
-                {/* Campos Faixa de Indicação e Faixa Calibrada - apenas para micropipetas e buretas */}
-                {(formData.tipoEquipamento === "micropipeta" ||
-                  formData.tipoEquipamento === "bureta") && (
-                  <>
-                    <VolumeInput
-                      label="Faixa de Indicação"
-                      volumeName="faixaIndicacao"
-                      unitName="unidadeFaixaIndicacao"
-                      volumeValue={formData.faixaIndicacao}
-                      unitValue={formData.unidadeFaixaIndicacao}
-                      onChange={handleChange}
-                      placeholder="Ex: 100-1000"
-                    />
-                    <VolumeInput
-                      label="Faixa Calibrada"
-                      volumeName="faixaCalibrada"
-                      unitName="unidadeFaixaCalibrada"
-                      volumeValue={formData.faixaCalibrada}
-                      unitValue={formData.unidadeFaixaCalibrada}
-                      onChange={handleChange}
-                      placeholder="Ex: 100-1000"
-                    />
-                  </>
-                )}{" "}
-              </div>
-            </div>
-            <div className="p-4 rounded-md border border-gray-200">
-              {" "}
-              <div className="flex justify-between items-center mb-3">
-                {" "}
-                <h3
-                  className="text-lg font-semibold flex items-center py-2 px-3 relative"
-                  style={{
-                    color: "rgb(75, 85, 99)",
-                  }}
-                >
-                  <div
-                    className="absolute left-0 top-0 bottom-0 w-1 rounded-full"
-                    style={{
-                      background:
-                        "linear-gradient(180deg, rgb(144, 199, 45), rgb(120, 170, 35))",
-                    }}
-                  />
-                  <TrendingUp
-                    className="mr-2"
-                    style={{ color: "rgb(144, 199, 45)" }}
-                  />{" "}
-                  Pontos de Calibração
-                  {formData.tipoEquipamento === "repipetador" && (
-                    <span className="ml-2 text-sm px-2 py-1 bg-green-100 text-green-800 rounded-md">
-                      {seringas.length} Seringa
-                      {seringas.length !== 1 ? "s" : ""}
-                    </span>
-                  )}
-                  {formData.tipoInstrumento === "multicanal" && (
-                    <span className="ml-2 text-sm px-2 py-1 bg-green-100 text-green-800 rounded-md">
-                      {quantidadeCanais} Canais
-                    </span>
-                  )}
-                </h3>
-                <div className="flex space-x-2">
+            {!isBatchMode && (
+              <>
+                <div className="p-4 rounded-md border border-gray-200">
                   {" "}
-                  <ActionButton
-                    onClick={() => setMostrarNotaCalculos(!mostrarNotaCalculos)}
-                    variant={mostrarNotaCalculos ? "success" : "outline-green"}
-                    size="sm"
-                    icon={mostrarNotaCalculos ? EyeOff : Info}
+                  <h3
+                    className="text-lg font-semibold mb-3 py-2 px-3 relative"
+                    style={{
+                      color: "rgb(75, 85, 99)",
+                    }}
                   >
-                    {mostrarNotaCalculos
-                      ? "Ocultar Ajuda"
-                      : "Como os cálculos são feitos?"}
-                  </ActionButton>{" "}
-                  {/* Controles específicos para cada tipo de equipamento */}{" "}
-                  {formData.tipoEquipamento === "repipetador" ? (
-                    <ActionButton
-                      onClick={adicionarSeringa}
-                      variant="outline-small"
-                      icon={Plus}
-                      title="Adicionar nova seringa"
+                    <div
+                      className="absolute left-0 top-0 bottom-0 w-1 rounded-full"
+                      style={{
+                        background:
+                          "linear-gradient(180deg, rgb(144, 199, 45), rgb(120, 170, 35))",
+                      }}
+                    />
+                    Dados{" "}
+                    {formData.tipoEquipamento === "micropipeta"
+                      ? "da Micropipeta"
+                      : formData.tipoEquipamento === "bureta"
+                        ? "da Bureta"
+                        : "do Repipetador"}
+                  </h3>{" "}
+                  {/* Seletor de tipo de equipamento */}
+                  <RadioGroup
+                    name="tipoEquipamento"
+                    value={formData.tipoEquipamento}
+                    onChange={handleChange}
+                    label="Tipo de Equipamento"
+                    required
+                    variant="equipamento"
+                    options={[
+                      {
+                        value: "micropipeta",
+                        label: "Micropipeta",
+                      },
+                      {
+                        value: "bureta",
+                        label: "Bureta",
+                      },
+                      {
+                        value: "repipetador",
+                        label: "Repipetador",
+                      },
+                    ]}
+                  />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {" "}
+                    <FormInput
+                      label={`Marca ${
+                        formData.tipoEquipamento === "micropipeta"
+                          ? "da Pipeta"
+                          : formData.tipoEquipamento === "bureta"
+                            ? "da Bureta"
+                            : "do Repipetador"
+                      }`}
+                      name="marcaPipeta"
+                      value={formData.marcaPipeta}
+                      onChange={handleChange}
+                      placeholder={
+                        formData.tipoEquipamento === "micropipeta"
+                          ? "Ex: Eppendorf, Gilson, HTL, etc."
+                          : "Ex: Eppendorf, Brand, Rainin, etc."
+                      }
+                    />{" "}
+                    <FormInput
+                      label={`Modelo ${
+                        formData.tipoEquipamento === "micropipeta"
+                          ? "da Pipeta"
+                          : "do Repipetador"
+                      }`}
+                      name="modeloPipeta"
+                      value={formData.modeloPipeta}
+                      onChange={handleChange}
+                      placeholder={
+                        formData.tipoEquipamento === "micropipeta"
+                          ? "Ex: P1000, Research Plus, etc."
+                          : formData.tipoEquipamento === "bureta"
+                            ? "Ex: B25, B50, Bureta Digital, etc."
+                            : "Ex: Multipette E3x, Repeater M4, etc."
+                      }
+                    />{" "}
+                    <FormInput
+                      label={`Número/Série ${
+                        formData.tipoEquipamento === "micropipeta"
+                          ? "da Pipeta"
+                          : formData.tipoEquipamento === "bureta"
+                            ? "da Bureta"
+                            : "do Repipetador"
+                      }`}
+                      name="numeroPipeta"
+                      value={formData.numeroPipeta}
+                      onChange={handleChange}
+                      placeholder="Ex: AJ12345"
+                    />
+                    <FormInput
+                      label="Nº de Identificação"
+                      name="numeroIdentificacao"
+                      value={formData.numeroIdentificacao}
+                      onChange={handleChange}
+                      placeholder="Ex: ID001, BIO123, etc. (opcional)"
+                    />{" "}
+                    {/* Campo Volume - apenas para micropipetas e buretas */}
+                    {(formData.tipoEquipamento === "micropipeta" ||
+                      formData.tipoEquipamento === "bureta") && (
+                      <VolumeInput
+                        label="Volume"
+                        volumeName="capacidade"
+                        unitName="unidadeCapacidade"
+                        volumeValue={formData.capacidade}
+                        unitValue={formData.unidadeCapacidade}
+                        onChange={handleChange}
+                        placeholder="Ex: 1000"
+                        required
+                      />
+                    )}{" "}
+                    {/* Tipo de Instrumento - só aparece para micropipetas */}
+                    {formData.tipoEquipamento === "micropipeta" && (
+                      <div className="space-y-4">
+                        {" "}
+                        <RadioGroup
+                          name="tipoInstrumento"
+                          value={formData.tipoInstrumento}
+                          onChange={handleChange}
+                          label="Tipo de Instrumento"
+                          required
+                          variant="inline"
+                          options={[
+                            {
+                              value: "monocanal",
+                              label: "Monocanal",
+                            },
+                            {
+                              value: "multicanal",
+                              label: "Multicanal",
+                            },
+                          ]}
+                        />
+                        {/* Seleção de quantidade de canais - só aparece quando multicanal está selecionado */}
+                        {formData.tipoInstrumento === "multicanal" && (
+                          <div className="mt-3 space-y-4">
+                            <div className="p-3 bg-gray-50 rounded-md border border-gray-200">
+                              <label
+                                className="block text-sm font-medium mb-2"
+                                style={{ color: "rgb(75, 85, 99)" }}
+                              >
+                                Quantidade de Canais
+                              </label>
+                              <RadioGroup
+                                name="quantidadeCanais"
+                                value={quantidadeCanais.toString()}
+                                onChange={(e) =>
+                                  handleQuantidadeCanaisChange(
+                                    parseInt(e.target.value),
+                                  )
+                                }
+                                variant="canais"
+                                options={[
+                                  {
+                                    value: "8",
+                                    label: "8 Canais",
+                                  },
+                                  {
+                                    value: "12",
+                                    label: "12 Canais",
+                                  },
+                                ]}
+                              />
+                            </div>
+
+                            {/* Configuração de pontos por canal */}
+                            <div className="p-3 bg-gray-50 rounded-md border border-gray-200">
+                              <div className="flex items-center justify-between mb-2">
+                                <label
+                                  className="block text-sm font-medium"
+                                  style={{ color: "rgb(75, 85, 99)" }}
+                                >
+                                  Pontos de Calibração por Canal
+                                </label>
+                              </div>
+                              <div className="flex items-center space-x-3">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handlePontosPorCanalChange(
+                                      Math.max(1, pontosPorCanal - 1),
+                                    )
+                                  }
+                                  className="flex items-center justify-center w-8 h-8 bg-white border border-gray-300 rounded-md hover:bg-gray-50 text-gray-600 transition-colors"
+                                  disabled={pontosPorCanal <= 1}
+                                >
+                                  <Minus size={16} />
+                                </button>
+                                <span className="px-3 py-1 bg-white border border-gray-300 rounded-md text-center font-medium min-w-[3rem]">
+                                  {pontosPorCanal}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handlePontosPorCanalChange(
+                                      Math.min(10, pontosPorCanal + 1),
+                                    )
+                                  }
+                                  className="flex items-center justify-center w-8 h-8 bg-white border border-gray-300 rounded-md hover:bg-gray-50 text-gray-600 transition-colors"
+                                  disabled={pontosPorCanal >= 10}
+                                >
+                                  <Plus size={16} />
+                                </button>
+                                <span className="text-sm text-gray-600">
+                                  pontos por canal
+                                </span>
+                              </div>
+                              <p className="text-xs text-gray-600 mt-2">
+                                Cada canal terá {pontosPorCanal} ponto
+                                {pontosPorCanal !== 1 ? "s" : ""} de calibração
+                                inicialmente.
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}{" "}
+                    {/* Campos Faixa de Indicação e Faixa Calibrada - apenas para micropipetas e buretas */}
+                    {(formData.tipoEquipamento === "micropipeta" ||
+                      formData.tipoEquipamento === "bureta") && (
+                      <>
+                        <VolumeInput
+                          label="Faixa de Indicação"
+                          volumeName="faixaIndicacao"
+                          unitName="unidadeFaixaIndicacao"
+                          volumeValue={formData.faixaIndicacao}
+                          unitValue={formData.unidadeFaixaIndicacao}
+                          onChange={handleChange}
+                          placeholder="Ex: 100-1000"
+                        />
+                        <VolumeInput
+                          label="Faixa Calibrada"
+                          volumeName="faixaCalibrada"
+                          unitName="unidadeFaixaCalibrada"
+                          volumeValue={formData.faixaCalibrada}
+                          unitValue={formData.unidadeFaixaCalibrada}
+                          onChange={handleChange}
+                          placeholder="Ex: 100-1000"
+                        />
+                      </>
+                    )}{" "}
+                  </div>
+                </div>
+                <div className="p-4 rounded-md border border-gray-200">
+                  {" "}
+                  <div className="flex justify-between items-center mb-3">
+                    {" "}
+                    <h3
+                      className="text-lg font-semibold flex items-center py-2 px-3 relative"
+                      style={{
+                        color: "rgb(75, 85, 99)",
+                      }}
                     >
-                      Adicionar Seringa
-                    </ActionButton>
-                  ) : formData.tipoInstrumento === "multicanal" ? (
-                    <ActionButton
-                      onClick={() =>
-                        setAutomacaoHabilitada(!automacaoHabilitada)
-                      }
-                      variant={
-                        automacaoHabilitada
-                          ? "automation-active"
-                          : "automation-inactive"
-                      }
-                      title={
-                        automacaoHabilitada
-                          ? "Desativar automação de valores próximos"
-                          : "Ativar automação de valores próximos"
-                      }
-                    >
-                      <span className="relative z-10">
-                        Automação: {automacaoHabilitada ? "Ativa" : "Inativa"}
-                      </span>
-                    </ActionButton>
-                  ) : (
+                      <div
+                        className="absolute left-0 top-0 bottom-0 w-1 rounded-full"
+                        style={{
+                          background:
+                            "linear-gradient(180deg, rgb(144, 199, 45), rgb(120, 170, 35))",
+                        }}
+                      />
+                      <TrendingUp
+                        className="mr-2"
+                        style={{ color: "rgb(144, 199, 45)" }}
+                      />{" "}
+                      Pontos de Calibração
+                      {formData.tipoEquipamento === "repipetador" && (
+                        <span className="ml-2 text-sm px-2 py-1 bg-green-100 text-green-800 rounded-md">
+                          {seringas.length} Seringa
+                          {seringas.length !== 1 ? "s" : ""}
+                        </span>
+                      )}
+                      {formData.tipoInstrumento === "multicanal" && (
+                        <span className="ml-2 text-sm px-2 py-1 bg-green-100 text-green-800 rounded-md">
+                          {quantidadeCanais} Canais
+                        </span>
+                      )}
+                    </h3>
                     <div className="flex space-x-2">
                       {" "}
                       <ActionButton
-                        onClick={adicionarPonto}
-                        variant="outline-small"
-                        icon={Plus}
-                        title="Adicionar novo ponto de calibração"
-                      >
-                        Adicionar Ponto
-                      </ActionButton>
-                      <ActionButton
                         onClick={() =>
-                          setAutomacaoHabilitada(!automacaoHabilitada)
+                          setMostrarNotaCalculos(!mostrarNotaCalculos)
                         }
                         variant={
-                          automacaoHabilitada
-                            ? "automation-active"
-                            : "automation-inactive"
+                          mostrarNotaCalculos ? "success" : "outline-green"
                         }
-                        title={
-                          automacaoHabilitada
-                            ? "Desativar automação: insira 5 valores seguidos de vírgula para gerar os outros 5 automaticamente"
-                            : "Ativar automação: insira 5 valores seguidos de vírgula para gerar os outros 5 automaticamente"
-                        }
+                        size="sm"
+                        icon={mostrarNotaCalculos ? EyeOff : Info}
                       >
-                        <span className="relative z-10">
-                          Automação: {automacaoHabilitada ? "Ativa" : "Inativa"}
-                        </span>
-                      </ActionButton>
-                    </div>
-                  )}
-                </div>
-              </div>{" "}
-              {mostrarNotaCalculos && (
-                <InfoBanner
-                  variant="success"
-                  onClose={() => setMostrarNotaCalculos(false)}
-                  closable={true}
-                  icon={Calculator}
-                  className="mb-4 animate-fade-in shadow-sm"
-                >
-                  <div>
-                    <p className="font-bold text-green-800 mb-2">
-                      Nota sobre os cálculos:
-                    </p>{" "}
-                    <p className="mb-2">
-                      Cole os valores das medições em{" "}
-                      <strong>massa (mg)</strong> separados por vírgulas. Os
-                      valores serão automaticamente convertidos para{" "}
-                      <strong>volume (µL)</strong> usando o fator Z, que varia
-                      de acordo com a temperatura do ambiente.
-                    </p>
-                    <p className="mb-2">
-                      <strong>Exemplo de entrada:</strong> 99.2, 99.12, 99.17,
-                      99.16, 99.26{" "}
-                    </p>
-                    <p className="mb-3">
-                      Fórmula: Volume (µL) = Massa (mg) × Fator Z
-                    </p>
-                    <div className="border-t border-green-200 pt-2">
-                      <p className="font-bold text-green-800 mb-1">
-                        Cálculos realizados:
-                      </p>
-                      <ul className="list-disc ml-4 mt-1">
-                        <li>
-                          <strong>Mean Volume:</strong> Média dos volumes
-                          individuais em <strong>µL</strong> (cada massa × Fator
-                          Z)
-                        </li>
-                        <li>
-                          <strong>Accuracy:</strong> Mean Volume - Volume
-                          Nominal
-                        </li>
-                        <li>
-                          <strong>Accuracy %:</strong> (Accuracy ÷ Volume
-                          Nominal) × 100
-                        </li>
-                        <li>
-                          <strong>Precision (SD):</strong> Desvio padrão dos
-                          volumes individuais
-                        </li>
-                        <li>
-                          <strong>Precision (CV):</strong> (SD ÷ Mean Volume) ×
-                          100%
-                        </li>
-                      </ul>
-                    </div>
-                  </div>
-                </InfoBanner>
-              )}{" "}
-              <div className="space-y-6">
-                {formData.tipoEquipamento === "repipetador" ? ( // Layout para repipetador - agrupado por seringa
-                  seringas.map((seringa, seringaIndex) => (
-                    <div
-                      key={seringa.id}
-                      className="border border-gray-300 rounded-md p-3 bg-white"
-                    >
-                      {/* Cabeçalho da seringa */}
-                      <div className="flex justify-between items-center mb-4">
-                        <h4 className="font-semibold text-green-800 flex items-center">
-                          <TestTube className="mr-2" />
-                          Seringa {seringaIndex + 1}
-                        </h4>
-                        <div className="flex items-center gap-2">
-                          {seringas.length > 1 && (
-                            <button
-                              type="button"
-                              className="flex items-center px-2 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-md border border-red-200 transition-colors"
-                              onClick={() =>
-                                removerSeringaDiretamente(
-                                  seringa.id,
-                                  seringaIndex + 1,
-                                )
-                              }
-                              title={`Remover seringa ${seringaIndex + 1}`}
-                            >
-                              <Trash2 className="mr-1" size={14} />
-                              <span className="text-xs">Remover Seringa</span>
-                            </button>
-                          )}
-                        </div>
-                      </div>{" "}
-                      {/* Configuração do volume nominal da seringa */}
-                      <div className="mb-4 p-3 bg-white rounded-md border border-gray-200">
-                        <label
-                          className="block text-sm font-medium mb-1"
-                          style={{ color: "rgb(75, 85, 99)" }}
+                        {mostrarNotaCalculos
+                          ? "Ocultar Ajuda"
+                          : "Como os cálculos são feitos?"}
+                      </ActionButton>{" "}
+                      {/* Controles específicos para cada tipo de equipamento */}{" "}
+                      {formData.tipoEquipamento === "repipetador" ? (
+                        <ActionButton
+                          onClick={adicionarSeringa}
+                          variant="outline-small"
+                          icon={Plus}
+                          title="Adicionar nova seringa"
                         >
-                          Volume Nominal da Seringa
-                        </label>
-                        <div className="flex max-w-xs">
+                          Adicionar Seringa
+                        </ActionButton>
+                      ) : formData.tipoInstrumento === "multicanal" ? (
+                        <ActionButton
+                          onClick={() =>
+                            setAutomacaoHabilitada(!automacaoHabilitada)
+                          }
+                          variant={
+                            automacaoHabilitada
+                              ? "automation-active"
+                              : "automation-inactive"
+                          }
+                          title={
+                            automacaoHabilitada
+                              ? "Desativar automação de valores próximos"
+                              : "Ativar automação de valores próximos"
+                          }
+                        >
+                          <span className="relative z-10">
+                            Automação:{" "}
+                            {automacaoHabilitada ? "Ativa" : "Inativa"}
+                          </span>
+                        </ActionButton>
+                      ) : (
+                        <div className="flex space-x-2">
                           {" "}
-                          <input
-                            type="text"
-                            value={seringa.volumeNominal}
-                            onChange={(e) =>
-                              atualizarSeringa(
-                                seringa.id,
-                                "volumeNominal",
-                                formatNumberInput(e.target.value),
-                              )
-                            }
-                            placeholder="Volume nominal"
-                            className="flex-1 px-3 py-2 border border-gray-300 rounded-l-md transition-colors duration-200 ease-in-out focus:outline-none focus:border-green-500"
-                            style={{
-                              borderColor: "#d1d5db",
-                              color: "rgb(75, 85, 99)",
-                            }}
-                            onFocus={(e) => {
-                              e.target.style.borderColor = "rgb(144, 199, 45)";
-                            }}
-                            onBlur={(e) => {
-                              e.target.style.borderColor = "#d1d5db";
-                            }}
-                            required
-                          />{" "}
-                          <select
-                            value={seringa.unidade}
-                            onChange={(e) =>
-                              atualizarSeringa(
-                                seringa.id,
-                                "unidade",
-                                e.target.value,
-                              )
-                            }
-                            className="px-3 py-2 border border-l-0 border-gray-300 rounded-r-md transition-colors duration-200 ease-in-out focus:outline-none focus:border-green-500"
-                            style={{
-                              borderColor: "#d1d5db",
-                              color: "rgb(75, 85, 99)",
-                            }}
-                            onFocus={(e) => {
-                              e.target.style.borderColor = "rgb(144, 199, 45)";
-                            }}
-                            onBlur={(e) => {
-                              e.target.style.borderColor = "#d1d5db";
-                            }}
+                          <ActionButton
+                            onClick={adicionarPonto}
+                            variant="outline-small"
+                            icon={Plus}
+                            title="Adicionar novo ponto de calibração"
                           >
-                            {" "}
-                            <option value="µL">µL</option>
-                            <option value="mL">mL</option>
-                          </select>
+                            Adicionar Ponto
+                          </ActionButton>
+                          <ActionButton
+                            onClick={() =>
+                              setAutomacaoHabilitada(!automacaoHabilitada)
+                            }
+                            variant={
+                              automacaoHabilitada
+                                ? "automation-active"
+                                : "automation-inactive"
+                            }
+                            title={
+                              automacaoHabilitada
+                                ? "Desativar automação: insira 5 valores seguidos de vírgula para gerar os outros 5 automaticamente"
+                                : "Ativar automação: insira 5 valores seguidos de vírgula para gerar os outros 5 automaticamente"
+                            }
+                          >
+                            <span className="relative z-10">
+                              Automação:{" "}
+                              {automacaoHabilitada ? "Ativa" : "Inativa"}
+                            </span>
+                          </ActionButton>
+                        </div>
+                      )}
+                    </div>
+                  </div>{" "}
+                  {mostrarNotaCalculos && (
+                    <InfoBanner
+                      variant="success"
+                      onClose={() => setMostrarNotaCalculos(false)}
+                      closable={true}
+                      icon={Calculator}
+                      className="mb-4 animate-fade-in shadow-sm"
+                    >
+                      <div>
+                        <p className="font-bold text-green-800 mb-2">
+                          Nota sobre os cálculos:
+                        </p>{" "}
+                        <p className="mb-2">
+                          Cole os valores das medições em{" "}
+                          <strong>massa (mg)</strong> separados por vírgulas. Os
+                          valores serão automaticamente convertidos para{" "}
+                          <strong>volume (µL)</strong> usando o fator Z, que
+                          varia de acordo com a temperatura do ambiente.
+                        </p>
+                        <p className="mb-2">
+                          <strong>Exemplo de entrada:</strong> 99.2, 99.12,
+                          99.17, 99.16, 99.26{" "}
+                        </p>
+                        <p className="mb-3">
+                          Fórmula: Volume (µL) = Massa (mg) × Fator Z
+                        </p>
+                        <div className="border-t border-green-200 pt-2">
+                          <p className="font-bold text-green-800 mb-1">
+                            Cálculos realizados:
+                          </p>
+                          <ul className="list-disc ml-4 mt-1">
+                            <li>
+                              <strong>Mean Volume:</strong> Média dos volumes
+                              individuais em <strong>µL</strong> (cada massa ×
+                              Fator Z)
+                            </li>
+                            <li>
+                              <strong>Accuracy:</strong> Mean Volume - Volume
+                              Nominal
+                            </li>
+                            <li>
+                              <strong>Accuracy %:</strong> (Accuracy ÷ Volume
+                              Nominal) × 100
+                            </li>
+                            <li>
+                              <strong>Precision (SD):</strong> Desvio padrão dos
+                              volumes individuais
+                            </li>
+                            <li>
+                              <strong>Precision (CV):</strong> (SD ÷ Mean
+                              Volume) × 100%
+                            </li>
+                          </ul>
                         </div>
                       </div>
-                      {/* Container dos 3 pontos de calibração da seringa */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        {seringa.pontosCalibra.map((ponto, pontoIndex) => (
+                    </InfoBanner>
+                  )}{" "}
+                  <div className="space-y-6">
+                    {formData.tipoEquipamento === "repipetador" ? ( // Layout para repipetador - agrupado por seringa
+                      seringas.map((seringa, seringaIndex) => (
+                        <div
+                          key={seringa.id}
+                          className="border border-gray-300 rounded-md p-3 bg-white"
+                        >
+                          {/* Cabeçalho da seringa */}
+                          <div className="flex justify-between items-center mb-4">
+                            <h4 className="font-semibold text-green-800 flex items-center">
+                              <TestTube className="mr-2" />
+                              Seringa {seringaIndex + 1}
+                            </h4>
+                            <div className="flex items-center gap-2">
+                              {seringas.length > 1 && (
+                                <button
+                                  type="button"
+                                  className="flex items-center px-2 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-md border border-red-200 transition-colors"
+                                  onClick={() =>
+                                    removerSeringaDiretamente(
+                                      seringa.id,
+                                      seringaIndex + 1,
+                                    )
+                                  }
+                                  title={`Remover seringa ${seringaIndex + 1}`}
+                                >
+                                  <Trash2 className="mr-1" size={14} />
+                                  <span className="text-xs">
+                                    Remover Seringa
+                                  </span>
+                                </button>
+                              )}
+                            </div>
+                          </div>{" "}
+                          {/* Configuração do volume nominal da seringa */}
+                          <div className="mb-4 p-3 bg-white rounded-md border border-gray-200">
+                            <label
+                              className="block text-sm font-medium mb-1"
+                              style={{ color: "rgb(75, 85, 99)" }}
+                            >
+                              Volume Nominal da Seringa
+                            </label>
+                            <div className="flex max-w-xs">
+                              {" "}
+                              <input
+                                type="text"
+                                value={seringa.volumeNominal}
+                                onChange={(e) =>
+                                  atualizarSeringa(
+                                    seringa.id,
+                                    "volumeNominal",
+                                    formatNumberInput(e.target.value),
+                                  )
+                                }
+                                placeholder="Volume nominal"
+                                className="flex-1 px-3 py-2 border border-gray-300 rounded-l-md transition-colors duration-200 ease-in-out focus:outline-none focus:border-green-500"
+                                style={{
+                                  borderColor: "#d1d5db",
+                                  color: "rgb(75, 85, 99)",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.borderColor =
+                                    "rgb(144, 199, 45)";
+                                }}
+                                onBlur={(e) => {
+                                  e.target.style.borderColor = "#d1d5db";
+                                }}
+                                required
+                              />{" "}
+                              <select
+                                value={seringa.unidade}
+                                onChange={(e) =>
+                                  atualizarSeringa(
+                                    seringa.id,
+                                    "unidade",
+                                    e.target.value,
+                                  )
+                                }
+                                className="px-3 py-2 border border-l-0 border-gray-300 rounded-r-md transition-colors duration-200 ease-in-out focus:outline-none focus:border-green-500"
+                                style={{
+                                  borderColor: "#d1d5db",
+                                  color: "rgb(75, 85, 99)",
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.borderColor =
+                                    "rgb(144, 199, 45)";
+                                }}
+                                onBlur={(e) => {
+                                  e.target.style.borderColor = "#d1d5db";
+                                }}
+                              >
+                                {" "}
+                                <option value="µL">µL</option>
+                                <option value="mL">mL</option>
+                              </select>
+                            </div>
+                          </div>
+                          {/* Container dos 3 pontos de calibração da seringa */}
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            {seringa.pontosCalibra.map((ponto, pontoIndex) => (
+                              <div
+                                key={ponto.id}
+                                className="border border-gray-300 rounded-md p-3 bg-white relative"
+                              >
+                                <div className="mb-3">
+                                  {" "}
+                                  <div className="flex justify-between items-center mb-2">
+                                    <span className="text-sm font-medium text-gray-600">
+                                      Ponto {pontoIndex + 1}
+                                    </span>
+                                  </div>{" "}
+                                  <VolumeInputPoint
+                                    label="Volume Nominal"
+                                    volumeValue={ponto.volumeNominal}
+                                    unitValue={ponto.unidade}
+                                    onVolumeChange={(e) =>
+                                      atualizarPontoSeringa(
+                                        seringa.id,
+                                        ponto.id,
+                                        "volumeNominal",
+                                        formatNumberInput(e.target.value),
+                                      )
+                                    }
+                                    onUnitChange={(e) =>
+                                      atualizarPontoSeringa(
+                                        seringa.id,
+                                        ponto.id,
+                                        "unidade",
+                                        e.target.value,
+                                      )
+                                    }
+                                    placeholder="Volume nominal"
+                                    required
+                                  />
+                                </div>
+
+                                <div className="mb-3">
+                                  <label
+                                    className="block text-sm font-medium mb-1"
+                                    style={{ color: "rgb(75, 85, 99)" }}
+                                  >
+                                    Medições (mg)
+                                  </label>
+                                  <div className="space-y-2">
+                                    {" "}
+                                    <textarea
+                                      value={ponto.valoresTexto || ""}
+                                      onChange={(e) =>
+                                        handleValoresChangeSeringa(
+                                          seringa.id,
+                                          ponto.id,
+                                          e.target.value,
+                                        )
+                                      }
+                                      placeholder="Cole os valores separados por vírgula"
+                                      className="w-full px-3 py-2 border border-gray-300 rounded-md resize-none transition-colors duration-200 ease-in-out focus:outline-none focus:border-green-500"
+                                      style={{
+                                        borderColor: "#d1d5db",
+                                        color: "rgb(75, 85, 99)",
+                                      }}
+                                      onFocus={(e) => {
+                                        e.target.style.borderColor =
+                                          "rgb(144, 199, 45)";
+                                      }}
+                                      onBlur={(e) => {
+                                        e.target.style.borderColor = "#d1d5db";
+                                      }}
+                                      rows="2"
+                                    />
+                                    {/* Mostrar os valores processados */}
+                                    {ponto.medicoes.some((m) => m !== "") && (
+                                      <div className="mt-2">
+                                        <div className="text-xs text-gray-500 mb-1">
+                                          Valores detectados:
+                                        </div>
+                                        <div className="grid grid-cols-3 gap-1">
+                                          {ponto.medicoes
+                                            .slice(0, 6)
+                                            .map((medicao, index) => (
+                                              <div
+                                                key={index}
+                                                className={`px-1 py-1 text-xs rounded text-center ${
+                                                  medicao !== ""
+                                                    ? "bg-green-100 text-green-800 border border-green-200"
+                                                    : "bg-gray-100 text-gray-400 border border-gray-200"
+                                                }`}
+                                              >
+                                                {medicao !== ""
+                                                  ? medicao
+                                                  : `M${index + 1}`}
+                                              </div>
+                                            ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Resultados dos cálculos */}
+                                {ponto.media !== null && (
+                                  <div className="bg-gray-50 p-2 rounded-md">
+                                    <h5 className="font-medium mb-2 text-xs text-gray-700">
+                                      Resultados
+                                    </h5>
+                                    <div className="space-y-2 text-xs">
+                                      <div className="p-2 bg-white rounded shadow-sm border border-gray-200">
+                                        <div className="text-xs text-gray-500 mb-1">
+                                          Mean Volume
+                                        </div>
+                                        <div className="flex justify-between">
+                                          <span className="font-medium">
+                                            {ponto.mediaMassa?.toFixed(2)} mg
+                                          </span>
+                                          <span className="text-green-600 font-medium">
+                                            {ponto.media?.toFixed(2)} µL
+                                          </span>
+                                        </div>
+                                      </div>
+                                      <div className="p-2 bg-white rounded shadow-sm border border-gray-200">
+                                        <div className="text-xs text-gray-500 mb-1">
+                                          Accuracy
+                                        </div>
+                                        <div className="flex justify-between">
+                                          <span className="font-medium">
+                                            {ponto.inexatidao?.toFixed(2)} µL
+                                          </span>
+                                          <span
+                                            className={
+                                              Math.abs(
+                                                ponto.inexatidaoPercentual,
+                                              ) > 5
+                                                ? "text-red-600 font-medium"
+                                                : "text-green-600 font-medium"
+                                            }
+                                          >
+                                            {ponto.inexatidaoPercentual?.toFixed(
+                                              2,
+                                            )}
+                                            %
+                                          </span>
+                                        </div>
+                                      </div>
+                                      <div className="p-2 bg-white rounded shadow-sm border border-gray-200">
+                                        <div className="text-xs text-gray-500 mb-1">
+                                          Precision
+                                        </div>
+                                        <div className="flex justify-between">
+                                          {" "}
+                                          <span className="font-medium">
+                                            SD: {ponto.desvioPadrao?.toFixed(2)}
+                                          </span>
+                                          <span className="text-green-600 font-medium">
+                                            CV:{" "}
+                                            {ponto.coeficienteVariacao?.toFixed(
+                                              2,
+                                            )}
+                                            %
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))
+                    ) : formData.tipoInstrumento === "multicanal" ? (
+                      // Layout para micropipeta multicanal - agrupado por canal
+                      Array.from({ length: numeroCanais }, (_, canalIndex) => {
+                        const canalNum = canalIndex + 1;
+                        const pontosDoCanalAtual = pontosCalibra.filter(
+                          (p) => p.canal === canalNum,
+                        );
+                        return (
+                          <div
+                            key={`canal-${canalNum}`}
+                            className="border border-gray-300 rounded-md p-3 bg-white"
+                          >
+                            {" "}
+                            {/* Cabeçalho do canal */}
+                            <div className="flex justify-between items-center mb-4">
+                              <h4 className="font-semibold text-green-800 flex items-center">
+                                <TestTube className="mr-2" />
+                                Canal {canalNum}{" "}
+                                {canalNum === 1 && <CanalMestreBadge />}
+                              </h4>
+                              <div className="flex items-center gap-2">
+                                {numeroCanais > 1 && canalNum !== 1 && (
+                                  <button
+                                    type="button"
+                                    className="flex items-center px-2 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-md border border-red-200 transition-colors"
+                                    onClick={() => {
+                                      const primeiroPontoDoCanal =
+                                        pontosDoCanalAtual[0];
+                                      if (primeiroPontoDoCanal) {
+                                        removerPontoDiretamente(
+                                          primeiroPontoDoCanal.id,
+                                          canalNum,
+                                          true,
+                                        );
+                                      }
+                                    }}
+                                    title={`Remover canal ${canalNum} completo`}
+                                  >
+                                    <Trash2 className="mr-1" size={14} />
+                                    <span className="text-xs">
+                                      Remover Canal
+                                    </span>
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                            {/* Container dos pontos do canal */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              {pontosDoCanalAtual.map((ponto, pontoIndex) => (
+                                <div
+                                  key={ponto.id}
+                                  className="border border-gray-300 rounded-md p-3 bg-white relative"
+                                >
+                                  <div className="mb-3">
+                                    <div className="flex justify-between items-center mb-2">
+                                      <span className="text-sm font-medium text-gray-600">
+                                        Ponto {ponto.pontoPosicao}
+                                      </span>
+                                    </div>
+
+                                    <VolumeInputPoint
+                                      label="Volume Nominal"
+                                      volumeValue={ponto.volumeNominal}
+                                      unitValue={ponto.unidade}
+                                      onVolumeChange={(e) =>
+                                        handleVolumeNominalChange(
+                                          ponto.id,
+                                          e.target.value,
+                                        )
+                                      }
+                                      onUnitChange={(e) =>
+                                        atualizarPontoCalibracao(
+                                          ponto.id,
+                                          "unidade",
+                                          e.target.value,
+                                        )
+                                      }
+                                      placeholder="Volume nominal"
+                                      required
+                                    />
+                                  </div>
+
+                                  <div className="mb-3">
+                                    <label
+                                      className="block text-sm font-medium mb-1"
+                                      style={{ color: "rgb(75, 85, 99)" }}
+                                    >
+                                      Medições (mg)
+                                    </label>
+                                    <div className="space-y-2">
+                                      {" "}
+                                      <textarea
+                                        value={ponto.valoresTexto || ""}
+                                        onChange={(e) =>
+                                          handleValoresChange(
+                                            ponto.id,
+                                            e.target.value,
+                                          )
+                                        }
+                                        placeholder="Cole os valores separados por vírgula"
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md resize-none transition-colors duration-200 ease-in-out focus:outline-none focus:border-green-500"
+                                        style={{
+                                          borderColor: "#d1d5db",
+                                          color: "rgb(75, 85, 99)",
+                                        }}
+                                        onFocus={(e) => {
+                                          e.target.style.borderColor =
+                                            "rgb(144, 199, 45)";
+                                        }}
+                                        onBlur={(e) => {
+                                          e.target.style.borderColor =
+                                            "#d1d5db";
+                                        }}
+                                        rows="2"
+                                      />
+                                      {/* Mostrar os valores processados */}
+                                      {ponto.medicoes.some((m) => m !== "") && (
+                                        <div className="mt-2">
+                                          <div className="text-xs text-gray-500 mb-1">
+                                            Valores detectados:
+                                          </div>
+                                          <div className="grid grid-cols-3 gap-1">
+                                            {ponto.medicoes
+                                              .slice(0, 6)
+                                              .map((medicao, index) => (
+                                                <div
+                                                  key={index}
+                                                  className={`px-1 py-1 text-xs rounded text-center ${
+                                                    medicao !== ""
+                                                      ? "bg-green-100 text-green-800 border border-green-200"
+                                                      : "bg-gray-100 text-gray-400 border border-gray-200"
+                                                  }`}
+                                                >
+                                                  {medicao !== ""
+                                                    ? medicao
+                                                    : `M${index + 1}`}
+                                                </div>
+                                              ))}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Resultados dos cálculos */}
+                                  {ponto.media !== null && (
+                                    <div className="bg-gray-50 p-2 rounded-md">
+                                      <h5 className="font-medium mb-2 text-xs text-gray-700">
+                                        Resultados
+                                      </h5>
+                                      <div className="space-y-2 text-xs">
+                                        <div className="p-2 bg-white rounded shadow-sm border border-gray-200">
+                                          <div className="text-xs text-gray-500 mb-1">
+                                            Mean Volume
+                                          </div>
+                                          <div className="flex justify-between">
+                                            <span className="font-medium">
+                                              {ponto.mediaMassa?.toFixed(2)} mg
+                                            </span>
+                                            <span className="text-green-600 font-medium">
+                                              {ponto.media?.toFixed(2)} µL
+                                            </span>
+                                          </div>
+                                        </div>
+                                        <div className="p-2 bg-white rounded shadow-sm border border-gray-200">
+                                          <div className="text-xs text-gray-500 mb-1">
+                                            Accuracy
+                                          </div>
+                                          <div className="flex justify-between">
+                                            <span className="font-medium">
+                                              {ponto.inexatidao?.toFixed(2)} µL
+                                            </span>
+                                            <span
+                                              className={
+                                                Math.abs(
+                                                  ponto.inexatidaoPercentual,
+                                                ) > 5
+                                                  ? "text-red-600 font-medium"
+                                                  : "text-green-600 font-medium"
+                                              }
+                                            >
+                                              {ponto.inexatidaoPercentual?.toFixed(
+                                                2,
+                                              )}
+                                              %
+                                            </span>
+                                          </div>
+                                        </div>
+                                        <div className="p-2 bg-white rounded shadow-sm border border-gray-200">
+                                          <div className="text-xs text-gray-500 mb-1">
+                                            Precision
+                                          </div>
+                                          <div className="flex justify-between">
+                                            {" "}
+                                            <span className="font-medium">
+                                              SD:{" "}
+                                              {ponto.desvioPadrao?.toFixed(2)}
+                                            </span>
+                                            <span className="text-green-600 font-medium">
+                                              CV:{" "}
+                                              {ponto.coeficienteVariacao?.toFixed(
+                                                2,
+                                              )}
+                                              %
+                                            </span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>{" "}
+                          </div>
+                        );
+                      }) // Layout para micropipeta monocanal - layout em grid similar às multicanais
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {pontosCalibra.map((ponto, pontoIndex) => (
                           <div
                             key={ponto.id}
-                            className="border border-gray-300 rounded-md p-3 bg-white relative"
+                            className="border border-gray-300 rounded-md p-3 bg-white"
                           >
                             <div className="mb-3">
-                              {" "}
                               <div className="flex justify-between items-center mb-2">
                                 <span className="text-sm font-medium text-gray-600">
                                   Ponto {pontoIndex + 1}
                                 </span>
-                              </div>{" "}
+                                {pontosCalibra.length > 1 && (
+                                  <button
+                                    type="button"
+                                    className="flex items-center px-2 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded-md border border-red-200 transition-colors text-xs"
+                                    onClick={() =>
+                                      removerPontoDiretamente(
+                                        ponto.id,
+                                        pontoIndex + 1,
+                                      )
+                                    }
+                                    title="Remover ponto de calibração"
+                                  >
+                                    <Trash2 className="mr-1" size={12} />
+                                    Remover
+                                  </button>
+                                )}{" "}
+                              </div>
+
                               <VolumeInputPoint
                                 label="Volume Nominal"
                                 volumeValue={ponto.volumeNominal}
                                 unitValue={ponto.unidade}
                                 onVolumeChange={(e) =>
-                                  atualizarPontoSeringa(
-                                    seringa.id,
+                                  handleVolumeNominalChange(
                                     ponto.id,
-                                    "volumeNominal",
-                                    formatNumberInput(e.target.value),
+                                    e.target.value,
                                   )
                                 }
                                 onUnitChange={(e) =>
-                                  atualizarPontoSeringa(
-                                    seringa.id,
+                                  atualizarPontoCalibracao(
                                     ponto.id,
                                     "unidade",
                                     e.target.value,
@@ -3153,7 +4045,6 @@ const EmitirCertificadoPage = () => {
                                 required
                               />
                             </div>
-
                             <div className="mb-3">
                               <label
                                 className="block text-sm font-medium mb-1"
@@ -3166,8 +4057,7 @@ const EmitirCertificadoPage = () => {
                                 <textarea
                                   value={ponto.valoresTexto || ""}
                                   onChange={(e) =>
-                                    handleValoresChangeSeringa(
-                                      seringa.id,
+                                    handleValoresChange(
                                       ponto.id,
                                       e.target.value,
                                     )
@@ -3211,11 +4101,20 @@ const EmitirCertificadoPage = () => {
                                           </div>
                                         ))}
                                     </div>
+                                    {/* Mostrar mais valores se houver */}
+                                    {ponto.medicoes.filter((m) => m !== "")
+                                      .length > 6 && (
+                                      <div className="mt-1 text-xs text-gray-500 text-center">
+                                        +
+                                        {ponto.medicoes.filter((m) => m !== "")
+                                          .length - 6}{" "}
+                                        valores adicionais
+                                      </div>
+                                    )}
                                   </div>
                                 )}
                               </div>
                             </div>
-
                             {/* Resultados dos cálculos */}
                             {ponto.media !== null && (
                               <div className="bg-gray-50 p-2 rounded-md">
@@ -3274,424 +4173,82 @@ const EmitirCertificadoPage = () => {
                                   </div>
                                 </div>
                               </div>
-                            )}
+                            )}{" "}
                           </div>
                         ))}
                       </div>
-                    </div>
-                  ))
-                ) : formData.tipoInstrumento === "multicanal" ? (
-                  // Layout para micropipeta multicanal - agrupado por canal
-                  Array.from({ length: numeroCanais }, (_, canalIndex) => {
-                    const canalNum = canalIndex + 1;
-                    const pontosDoCanalAtual = pontosCalibra.filter(
-                      (p) => p.canal === canalNum,
-                    );
-                    return (
-                      <div
-                        key={`canal-${canalNum}`}
-                        className="border border-gray-300 rounded-md p-3 bg-white"
-                      >
-                        {" "}
-                        {/* Cabeçalho do canal */}
-                        <div className="flex justify-between items-center mb-4">
-                          <h4 className="font-semibold text-green-800 flex items-center">
-                            <TestTube className="mr-2" />
-                            Canal {canalNum}{" "}
-                            {canalNum === 1 && <CanalMestreBadge />}
-                          </h4>
-                          <div className="flex items-center gap-2">
-                            {numeroCanais > 1 && canalNum !== 1 && (
-                              <button
-                                type="button"
-                                className="flex items-center px-2 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-md border border-red-200 transition-colors"
-                                onClick={() => {
-                                  const primeiroPontoDoCanal =
-                                    pontosDoCanalAtual[0];
-                                  if (primeiroPontoDoCanal) {
-                                    removerPontoDiretamente(
-                                      primeiroPontoDoCanal.id,
-                                      canalNum,
-                                      true,
-                                    );
-                                  }
-                                }}
-                                title={`Remover canal ${canalNum} completo`}
-                              >
-                                <Trash2 className="mr-1" size={14} />
-                                <span className="text-xs">Remover Canal</span>
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                        {/* Container dos pontos do canal */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          {pontosDoCanalAtual.map((ponto, pontoIndex) => (
-                            <div
-                              key={ponto.id}
-                              className="border border-gray-300 rounded-md p-3 bg-white relative"
-                            >
-                              <div className="mb-3">
-                                <div className="flex justify-between items-center mb-2">
-                                  <span className="text-sm font-medium text-gray-600">
-                                    Ponto {ponto.pontoPosicao}
-                                  </span>
-                                </div>
-
-                                <VolumeInputPoint
-                                  label="Volume Nominal"
-                                  volumeValue={ponto.volumeNominal}
-                                  unitValue={ponto.unidade}
-                                  onVolumeChange={(e) =>
-                                    handleVolumeNominalChange(
-                                      ponto.id,
-                                      e.target.value,
-                                    )
-                                  }
-                                  onUnitChange={(e) =>
-                                    atualizarPontoCalibracao(
-                                      ponto.id,
-                                      "unidade",
-                                      e.target.value,
-                                    )
-                                  }
-                                  placeholder="Volume nominal"
-                                  required
-                                />
-                              </div>
-
-                              <div className="mb-3">
-                                <label
-                                  className="block text-sm font-medium mb-1"
-                                  style={{ color: "rgb(75, 85, 99)" }}
-                                >
-                                  Medições (mg)
-                                </label>
-                                <div className="space-y-2">
-                                  {" "}
-                                  <textarea
-                                    value={ponto.valoresTexto || ""}
-                                    onChange={(e) =>
-                                      handleValoresChange(
-                                        ponto.id,
-                                        e.target.value,
-                                      )
-                                    }
-                                    placeholder="Cole os valores separados por vírgula"
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md resize-none transition-colors duration-200 ease-in-out focus:outline-none focus:border-green-500"
-                                    style={{
-                                      borderColor: "#d1d5db",
-                                      color: "rgb(75, 85, 99)",
-                                    }}
-                                    onFocus={(e) => {
-                                      e.target.style.borderColor =
-                                        "rgb(144, 199, 45)";
-                                    }}
-                                    onBlur={(e) => {
-                                      e.target.style.borderColor = "#d1d5db";
-                                    }}
-                                    rows="2"
-                                  />
-                                  {/* Mostrar os valores processados */}
-                                  {ponto.medicoes.some((m) => m !== "") && (
-                                    <div className="mt-2">
-                                      <div className="text-xs text-gray-500 mb-1">
-                                        Valores detectados:
-                                      </div>
-                                      <div className="grid grid-cols-3 gap-1">
-                                        {ponto.medicoes
-                                          .slice(0, 6)
-                                          .map((medicao, index) => (
-                                            <div
-                                              key={index}
-                                              className={`px-1 py-1 text-xs rounded text-center ${
-                                                medicao !== ""
-                                                  ? "bg-green-100 text-green-800 border border-green-200"
-                                                  : "bg-gray-100 text-gray-400 border border-gray-200"
-                                              }`}
-                                            >
-                                              {medicao !== ""
-                                                ? medicao
-                                                : `M${index + 1}`}
-                                            </div>
-                                          ))}
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-
-                              {/* Resultados dos cálculos */}
-                              {ponto.media !== null && (
-                                <div className="bg-gray-50 p-2 rounded-md">
-                                  <h5 className="font-medium mb-2 text-xs text-gray-700">
-                                    Resultados
-                                  </h5>
-                                  <div className="space-y-2 text-xs">
-                                    <div className="p-2 bg-white rounded shadow-sm border border-gray-200">
-                                      <div className="text-xs text-gray-500 mb-1">
-                                        Mean Volume
-                                      </div>
-                                      <div className="flex justify-between">
-                                        <span className="font-medium">
-                                          {ponto.mediaMassa?.toFixed(2)} mg
-                                        </span>
-                                        <span className="text-green-600 font-medium">
-                                          {ponto.media?.toFixed(2)} µL
-                                        </span>
-                                      </div>
-                                    </div>
-                                    <div className="p-2 bg-white rounded shadow-sm border border-gray-200">
-                                      <div className="text-xs text-gray-500 mb-1">
-                                        Accuracy
-                                      </div>
-                                      <div className="flex justify-between">
-                                        <span className="font-medium">
-                                          {ponto.inexatidao?.toFixed(2)} µL
-                                        </span>
-                                        <span
-                                          className={
-                                            Math.abs(
-                                              ponto.inexatidaoPercentual,
-                                            ) > 5
-                                              ? "text-red-600 font-medium"
-                                              : "text-green-600 font-medium"
-                                          }
-                                        >
-                                          {ponto.inexatidaoPercentual?.toFixed(
-                                            2,
-                                          )}
-                                          %
-                                        </span>
-                                      </div>
-                                    </div>
-                                    <div className="p-2 bg-white rounded shadow-sm border border-gray-200">
-                                      <div className="text-xs text-gray-500 mb-1">
-                                        Precision
-                                      </div>
-                                      <div className="flex justify-between">
-                                        {" "}
-                                        <span className="font-medium">
-                                          SD: {ponto.desvioPadrao?.toFixed(2)}
-                                        </span>
-                                        <span className="text-green-600 font-medium">
-                                          CV:{" "}
-                                          {ponto.coeficienteVariacao?.toFixed(
-                                            2,
-                                          )}
-                                          %
-                                        </span>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>{" "}
-                      </div>
-                    );
-                  }) // Layout para micropipeta monocanal - layout em grid similar às multicanais
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {pontosCalibra.map((ponto, pontoIndex) => (
-                      <div
-                        key={ponto.id}
-                        className="border border-gray-300 rounded-md p-3 bg-white"
-                      >
-                        <div className="mb-3">
-                          <div className="flex justify-between items-center mb-2">
-                            <span className="text-sm font-medium text-gray-600">
-                              Ponto {pontoIndex + 1}
-                            </span>
-                            {pontosCalibra.length > 1 && (
-                              <button
-                                type="button"
-                                className="flex items-center px-2 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded-md border border-red-200 transition-colors text-xs"
-                                onClick={() =>
-                                  removerPontoDiretamente(
-                                    ponto.id,
-                                    pontoIndex + 1,
-                                  )
-                                }
-                                title="Remover ponto de calibração"
-                              >
-                                <Trash2 className="mr-1" size={12} />
-                                Remover
-                              </button>
-                            )}{" "}
-                          </div>
-
-                          <VolumeInputPoint
-                            label="Volume Nominal"
-                            volumeValue={ponto.volumeNominal}
-                            unitValue={ponto.unidade}
-                            onVolumeChange={(e) =>
-                              handleVolumeNominalChange(
-                                ponto.id,
-                                e.target.value,
-                              )
-                            }
-                            onUnitChange={(e) =>
-                              atualizarPontoCalibracao(
-                                ponto.id,
-                                "unidade",
-                                e.target.value,
-                              )
-                            }
-                            placeholder="Volume nominal"
-                            required
-                          />
-                        </div>
-                        <div className="mb-3">
-                          <label
-                            className="block text-sm font-medium mb-1"
-                            style={{ color: "rgb(75, 85, 99)" }}
-                          >
-                            Medições (mg)
-                          </label>
-                          <div className="space-y-2">
-                            {" "}
-                            <textarea
-                              value={ponto.valoresTexto || ""}
-                              onChange={(e) =>
-                                handleValoresChange(ponto.id, e.target.value)
-                              }
-                              placeholder="Cole os valores separados por vírgula"
-                              className="w-full px-3 py-2 border border-gray-300 rounded-md resize-none transition-colors duration-200 ease-in-out focus:outline-none focus:border-green-500"
-                              style={{
-                                borderColor: "#d1d5db",
-                                color: "rgb(75, 85, 99)",
-                              }}
-                              onFocus={(e) => {
-                                e.target.style.borderColor =
-                                  "rgb(144, 199, 45)";
-                              }}
-                              onBlur={(e) => {
-                                e.target.style.borderColor = "#d1d5db";
-                              }}
-                              rows="2"
-                            />
-                            {/* Mostrar os valores processados */}
-                            {ponto.medicoes.some((m) => m !== "") && (
-                              <div className="mt-2">
-                                <div className="text-xs text-gray-500 mb-1">
-                                  Valores detectados:
-                                </div>
-                                <div className="grid grid-cols-3 gap-1">
-                                  {ponto.medicoes
-                                    .slice(0, 6)
-                                    .map((medicao, index) => (
-                                      <div
-                                        key={index}
-                                        className={`px-1 py-1 text-xs rounded text-center ${
-                                          medicao !== ""
-                                            ? "bg-green-100 text-green-800 border border-green-200"
-                                            : "bg-gray-100 text-gray-400 border border-gray-200"
-                                        }`}
-                                      >
-                                        {medicao !== ""
-                                          ? medicao
-                                          : `M${index + 1}`}
-                                      </div>
-                                    ))}
-                                </div>
-                                {/* Mostrar mais valores se houver */}
-                                {ponto.medicoes.filter((m) => m !== "").length >
-                                  6 && (
-                                  <div className="mt-1 text-xs text-gray-500 text-center">
-                                    +
-                                    {ponto.medicoes.filter((m) => m !== "")
-                                      .length - 6}{" "}
-                                    valores adicionais
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        {/* Resultados dos cálculos */}
-                        {ponto.media !== null && (
-                          <div className="bg-gray-50 p-2 rounded-md">
-                            <h5 className="font-medium mb-2 text-xs text-gray-700">
-                              Resultados
-                            </h5>
-                            <div className="space-y-2 text-xs">
-                              <div className="p-2 bg-white rounded shadow-sm border border-gray-200">
-                                <div className="text-xs text-gray-500 mb-1">
-                                  Mean Volume
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="font-medium">
-                                    {ponto.mediaMassa?.toFixed(2)} mg
-                                  </span>
-                                  <span className="text-green-600 font-medium">
-                                    {ponto.media?.toFixed(2)} µL
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="p-2 bg-white rounded shadow-sm border border-gray-200">
-                                <div className="text-xs text-gray-500 mb-1">
-                                  Accuracy
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="font-medium">
-                                    {ponto.inexatidao?.toFixed(2)} µL
-                                  </span>
-                                  <span
-                                    className={
-                                      Math.abs(ponto.inexatidaoPercentual) > 5
-                                        ? "text-red-600 font-medium"
-                                        : "text-green-600 font-medium"
-                                    }
-                                  >
-                                    {ponto.inexatidaoPercentual?.toFixed(2)}%
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="p-2 bg-white rounded shadow-sm border border-gray-200">
-                                <div className="text-xs text-gray-500 mb-1">
-                                  Precision
-                                </div>
-                                <div className="flex justify-between">
-                                  {" "}
-                                  <span className="font-medium">
-                                    SD: {ponto.desvioPadrao?.toFixed(2)}
-                                  </span>
-                                  <span className="text-green-600 font-medium">
-                                    CV: {ponto.coeficienteVariacao?.toFixed(2)}%
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        )}{" "}
-                      </div>
-                    ))}
+                    )}
                   </div>
+                </div>{" "}
+              </>
+            )}
+            <div className="flex w-full flex-col items-start gap-3 pb-24 md:pb-32">
+              {isBatchMode && batchData.length > 0 && !isProcessingBatch && (
+                <div className="w-full max-w-lg rounded-xl border border-green-100 bg-green-50 px-4 py-3 shadow-sm md:max-w-xl">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">
+                        Lote pronto para download
+                      </p>
+                      <p className="text-xs text-gray-600">
+                        {batchData.length} certificado(s) validados e prontos
+                        para gerar o ZIP.
+                      </p>
+                    </div>
+                    <div className="h-2.5 w-2.5 rounded-full bg-green-500 shadow-[0_0_0_6px_rgba(34,197,94,0.12)] animate-pulse" />
+                  </div>
+                </div>
+              )}
+
+              <div className="flex w-full justify-start">
+                {isBatchMode ? (
+                  <ActionButton
+                    type="button"
+                    onClick={handleGerarCertificadosLote}
+                    variant="secondary"
+                    className="min-w-[180px]"
+                    disabled={
+                      batchData.length === 0 ||
+                      isProcessingBatch ||
+                      !!validateNumeroCertificado(
+                        formData.numeroCertificado,
+                        true,
+                      ) ||
+                      !!validateDataCalibracao(formData.dataCalibracao)
+                    }
+                  >
+                    {isProcessingBatch ? (
+                      <>Processando {batchProgress}%...</>
+                    ) : (
+                      <>
+                        Baixar ZIP <Download className="ml-2" size={20} />
+                      </>
+                    )}
+                  </ActionButton>
+                ) : (
+                  <ActionButton
+                    type="submit"
+                    variant="secondary"
+                    disabled={
+                      !!validateNumeroCertificado(
+                        formData.numeroCertificado,
+                        true,
+                      ) || !!validateDataCalibracao(formData.dataCalibracao)
+                    }
+                    title={
+                      validateNumeroCertificado(
+                        formData.numeroCertificado,
+                        true,
+                      ) || validateDataCalibracao(formData.dataCalibracao)
+                        ? "Preencha número do certificado e data da calibração para habilitar a geração."
+                        : ""
+                    }
+                  >
+                    Gerar Certificado{" "}
+                    <Sparkles className="ml-2" size={20} aria-hidden="true" />
+                  </ActionButton>
                 )}
               </div>
-            </div>{" "}
-            <div className="flex justify-end">
-              <ActionButton
-                type="submit"
-                variant="secondary"
-                disabled={
-                  !!validateNumeroCertificado(
-                    formData.numeroCertificado,
-                    true,
-                  ) || !!validateDataCalibracao(formData.dataCalibracao)
-                }
-                title={
-                  validateNumeroCertificado(formData.numeroCertificado, true) ||
-                  validateDataCalibracao(formData.dataCalibracao)
-                    ? "Preencha número do certificado e data da calibração para habilitar a geração."
-                    : ""
-                }
-              >
-                Gerar Certificado{" "}
-                <Sparkles className="ml-2" size={20} aria-hidden="true" />
-              </ActionButton>
             </div>
           </form>
         )}
@@ -3709,6 +4266,7 @@ const EmitirCertificadoPage = () => {
             stopAnimation={stopAnimation}
             progress={animationProgress}
             currentField={currentField}
+            onBatchModeChange={setIsBatchMode}
           />
         )}
       </div>
