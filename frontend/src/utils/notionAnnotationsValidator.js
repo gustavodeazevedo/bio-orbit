@@ -129,18 +129,10 @@ const validateExtractedPoints = (extractedData, errors) => {
     });
 };
 
-const validateFieldPresenceAndDuplicates = (text, errors) => {
+const validateFieldPresenceAndDuplicates = (text, errors, validationContext = {}) => {
+    const isRepipetador = Boolean(validationContext?.isRepipetador);
     const requiredFields = [
         { label: "INSTRUMENTO", pattern: /^\s*INSTRUMENTO\s*:/gim },
-        { label: "VOLUME", pattern: /^\s*VOLUME\s*:/gim },
-        {
-            label: "PONTOS DE INDICACAO",
-            pattern: /^\s*PONTOS\s+DE\s+INDICA[C\u00c7][A\u00c3]O\s*:/gim,
-        },
-        {
-            label: "PONTOS CALIBRADOS",
-            pattern: /^\s*PONTOS\s+CALIBRADOS\s*:/gim,
-        },
         { label: "SERIE", pattern: /^\s*S[E\u00c9]RIE\s*:/gim },
         { label: "MARCA", pattern: /^\s*MARCA\s*:/gim },
         { label: "MODELO", pattern: /^\s*MODELO\s*:/gim },
@@ -154,11 +146,30 @@ const validateFieldPresenceAndDuplicates = (text, errors) => {
             pattern:
                 /^\s*\*{0,2}\s*N[\u00ba\u00b0o]?\s*DE\s*IDENTIFICA[C\u00c7][A\u00c3]O\s*:/gim,
         },
-        {
-            label: "PONTOS DE CALIBRACAO",
-            pattern: /^\s*PONTOS\s+DE\s+CALIBRA[C\u00c7][A\u00c3]O\s*:/gim,
-        },
     ];
+
+    if (isRepipetador) {
+        requiredFields.push(
+            { label: "SERINGAS UTILIZADAS", pattern: /^\s*SERINGAS\s+UTILIZADAS\s*:/gim },
+            { label: "SERINGA DE", pattern: /^\s*SERINGA\s+DE\s+/gim },
+        );
+    } else {
+        requiredFields.push(
+            { label: "VOLUME", pattern: /^\s*VOLUME\s*:/gim },
+            {
+                label: "PONTOS DE INDICACAO",
+                pattern: /^\s*PONTOS\s+DE\s+INDICA[C\u00c7][A\u00c3]O\s*:/gim,
+            },
+            {
+                label: "PONTOS CALIBRADOS",
+                pattern: /^\s*PONTOS\s+CALIBRADOS\s*:/gim,
+            },
+            {
+                label: "PONTOS DE CALIBRACAO",
+                pattern: /^\s*PONTOS\s+DE\s+CALIBRA[C\u00c7][A\u00c3]O\s*:/gim,
+            },
+        );
+    }
 
     requiredFields.forEach(({ label, pattern }) => {
         const count = countMatches(text, pattern);
@@ -333,6 +344,7 @@ const validateUnitsAndOrdering = (text, errors, validationContext = {}) => {
 };
 
 const validateCalibrationPoints = (text, extractedData, errors) => {
+    const isRepipetador = extractedData?.tipoEquipamento === "repipetador";
     const parsedPoints = parseCalibrationPointsFromText(text);
 
     if (parsedPoints.length === 0) {
@@ -342,19 +354,21 @@ const validateCalibrationPoints = (text, extractedData, errors) => {
         return;
     }
 
-    const duplicatedVolumes = parsedPoints
-        .map((point) => point.nominalVolume)
-        .filter(
-            (value, index, array) =>
-                Number.isFinite(value) && array.findIndex((item) => item === value) !== index,
-        );
+    if (!isRepipetador) {
+        const duplicatedVolumes = parsedPoints
+            .map((point) => point.nominalVolume)
+            .filter(
+                (value, index, array) =>
+                    Number.isFinite(value) && array.findIndex((item) => item === value) !== index,
+            );
 
-    if (duplicatedVolumes.length > 0) {
-        errors.push(
-            `Volumes nominais duplicados nos pontos de calibracao: ${[
-                ...new Set(duplicatedVolumes.map((value) => value.toString())),
-            ].join(", ")}.`,
-        );
+        if (duplicatedVolumes.length > 0) {
+            errors.push(
+                `Volumes nominais duplicados nos pontos de calibracao: ${[
+                    ...new Set(duplicatedVolumes.map((value) => value.toString())),
+                ].join(", ")}.`,
+            );
+        }
     }
 
     const repeatedMeasurementSets = new Map();
@@ -473,7 +487,10 @@ export const validateNotionAnnotationsPayload = (
         return [...new Set(errors)];
     }
 
-    validateFieldPresenceAndDuplicates(text, errors);
+    validateFieldPresenceAndDuplicates(text, errors, {
+        ...validationContext,
+        isRepipetador: extractedData?.tipoEquipamento === "repipetador",
+    });
     validateUnitsAndOrdering(text, errors, validationContext);
     validateCalibrationPoints(text, extractedData, errors);
 

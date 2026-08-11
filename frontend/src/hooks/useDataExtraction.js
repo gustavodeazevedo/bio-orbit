@@ -172,120 +172,7 @@ export const useDataExtraction = () => {
                 throw new Error('Texto muito curto. Por favor, forneça o texto completo do Notion.');
             }
 
-            // Validar se é o formato correto
-            if (!text.includes('INSTRUMENTO:')) {
-                throw new Error('Formato não reconhecido. Certifique-se de usar o formato padronizado do Notion.');
-            }
-
-            // Extrair tipo de instrumento
-            const { tipoEquipamento, tipoInstrumento } = extractInstrumentType(text);
-
-            // Extrair campos básicos
-            const volume = extractFieldValue(text, 'VOLUME');
-            const pontosIndicacao = extractFieldValue(text, 'PONTOS DE INDICAÇÃO');
-            const pontosCalibirados = extractFieldValue(text, 'PONTOS CALIBRADOS');
-            const serie = extractFieldValue(text, 'SÉRIE');
-            const marca = extractFieldValue(text, 'MARCA');
-            const modelo = extractFieldValue(text, 'MODELO');
-            const numeroOrdenacao = extractFieldValue(text, 'Nº DE ORDENAÇÃO');
-            const numeroIdentificacao = extractFieldValue(text, 'Nº DE IDENTIFICAÇÃO');
-
-            console.log('Valores extraídos:');
-            console.log('numeroIdentificacao:', numeroIdentificacao);
-            console.log('numeroOrdenacao:', numeroOrdenacao);
-            console.log('pontosIndicacao:', pontosIndicacao);
-            console.log('pontosCalibirados:', pontosCalibirados);
-
-            // Validação básica apenas para verificar se os campos existem no texto
-            // (Os campos podem ser N/A conforme os exemplos fornecidos)
-            if (!text.includes('MARCA:')) {
-                throw new Error('Campo MARCA: não encontrado. Verifique se está usando o formato correto.');
-            }
-
-            if (!text.includes('MODELO:')) {
-                throw new Error('Campo MODELO: não encontrado. Verifique se está usando o formato correto.');
-            }
-
-            if (!text.includes('SÉRIE:')) {
-                throw new Error('Campo SÉRIE: não encontrado. Verifique se está usando o formato correto.');
-            }
-
-            // Função auxiliar para tratar campos que podem ser N/A
-            const processField = (value, defaultValue = '') => {
-                if (!value || value === '') return defaultValue;
-                if (value === 'N/A') return 'N/A';
-                return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
-            };
-
-            // Função específica para campos que devem estar sempre em maiúscula
-            const processFieldUpperCase = (value, defaultValue = '') => {
-                if (!value || value === '') return defaultValue;
-                if (value === 'N/A') return 'N/A';
-                return value.toUpperCase();
-            };
-
-            // Função específica para processar números (não aplica transformações de texto)
-            const processNumber = (value, defaultValue = '') => {
-                if (!value || value === '') return defaultValue;
-                if (value === 'N/A') return 'N/A';
-                // Remove caracteres especiais indesejados e mantém apenas números, pontos e hífens
-                // Remove especificamente ** que pode aparecer por formatação de markdown
-                let cleanValue = value.replace(/\*\*/g, '').replace(/[^\d.-]/g, '');
-                return cleanValue;
-            };
-
-            let extractedData = {
-                tipoEquipamento,
-                tipoInstrumento,
-                marcaPipeta: processFieldUpperCase(marca), // FABRICANTE sempre em maiúscula
-                modeloPipeta: processFieldUpperCase(modelo), // MODELO sempre em maiúscula
-                numeroPipeta: processFieldUpperCase(serie), // Nº DE SÉRIE sempre em maiúscula
-                numeroIdentificacao: processFieldUpperCase(numeroIdentificacao, 'N/A'), // Nº DE IDENTIFICAÇÃO sempre em maiúscula
-                numeroCertificado: processNumber(numeroOrdenacao), // Usar processNumber para não aplicar transformações de texto
-                capacidade: volume || '',
-                unidadeCapacidade: 'µL',
-                faixaIndicacao: pontosIndicacao || '',
-                unidadeFaixaIndicacao: 'µL',
-                faixaCalibrada: pontosCalibirados || pontosIndicacao || '', // Usa PONTOS CALIBRADOS quando disponível
-                unidadeFaixaCalibrada: 'µL'
-            };
-
-            // Para repipetador, extrair seringas
-            if (tipoEquipamento === 'repipetador') {
-                const seringas = extractSeringas(text);
-                if (seringas.length === 0) {
-                    throw new Error('Nenhuma seringa encontrada para o repipetador. Verifique a seção "SERINGAS UTILIZADAS".');
-                }
-                extractedData.seringas = seringas;
-                extractedData.pontosCalibra = []; // Para repipetador, os pontos ficam nas seringas
-            } else {
-                // Para micropipetas e buretas, extrair pontos de calibração
-                const pontos = extractCalibrationPoints(text);
-                if (pontos.length === 0) {
-                    throw new Error('Nenhum ponto de calibração encontrado. Verifique a seção "PONTOS DE CALIBRAÇÃO".');
-                }
-
-                // Para multicanal, criar pontos apenas para o Canal Mestre (Canal 1)
-                if (tipoInstrumento === 'multicanal') {
-                    const quantidadeCanais = extractChannelCount(text);
-                    extractedData.quantidadeCanais = quantidadeCanais;
-
-                    // Criar pontos apenas para o Canal Mestre (Canal 1)
-                    // O Canal Mestre automaticamente propagará para os outros canais
-                    const pontosCanalMestre = pontos.map((ponto, index) => ({
-                        ...ponto,
-                        id: Date.now() + Math.random(),
-                        canal: 1, // Canal Mestre
-                        pontoPosicao: index + 1 // Posição do ponto (1, 2, 3, etc.)
-                    }));
-
-                    extractedData.pontosCalibra = pontosCanalMestre;
-                } else {
-                    extractedData.pontosCalibra = pontos;
-                }
-            }
-
-            return extractedData;
+            return extractSingleData(text);
 
         } catch (err) {
             setError(err.message);
@@ -295,8 +182,161 @@ export const useDataExtraction = () => {
         }
     }, [extractFieldValue, extractInstrumentType, extractChannelCount, extractCalibrationPoints, extractSeringas]);
 
+    // Função interna para extrair um único certificado (sem alterar estado de loading)
+    const extractSingleData = useCallback((text) => {
+        // Validar se é o formato correto
+        if (!text.includes('INSTRUMENTO:')) {
+            throw new Error('Formato não reconhecido. Certifique-se de usar o formato padronizado do Notion.');
+        }
+
+        // Extrair tipo de instrumento
+        const { tipoEquipamento, tipoInstrumento } = extractInstrumentType(text);
+
+        // Extrair campos básicos
+        const volume = extractFieldValue(text, 'VOLUME');
+        const pontosIndicacao = extractFieldValue(text, 'PONTOS DE INDICAÇÃO');
+        const pontosCalibirados = extractFieldValue(text, 'PONTOS CALIBRADOS');
+        const serie = extractFieldValue(text, 'SÉRIE');
+        const marca = extractFieldValue(text, 'MARCA');
+        const modelo = extractFieldValue(text, 'MODELO');
+        const numeroOrdenacao = extractFieldValue(text, 'Nº DE ORDENAÇÃO');
+        const numeroIdentificacao = extractFieldValue(text, 'Nº DE IDENTIFICAÇÃO');
+
+        console.log('Valores extraídos:');
+        console.log('numeroIdentificacao:', numeroIdentificacao);
+        console.log('numeroOrdenacao:', numeroOrdenacao);
+        console.log('pontosIndicacao:', pontosIndicacao);
+        console.log('pontosCalibirados:', pontosCalibirados);
+
+        // Validação básica apenas para verificar se os campos existem no texto
+        if (!text.includes('MARCA:')) {
+            throw new Error('Campo MARCA: não encontrado. Verifique se está usando o formato correto.');
+        }
+
+        if (!text.includes('MODELO:')) {
+            throw new Error('Campo MODELO: não encontrado. Verifique se está usando o formato correto.');
+        }
+
+        if (!text.includes('SÉRIE:')) {
+            throw new Error('Campo SÉRIE: não encontrado. Verifique se está usando o formato correto.');
+        }
+
+        // Função auxiliar para tratar campos que podem ser N/A
+        const processField = (value, defaultValue = '') => {
+            if (!value || value === '') return defaultValue;
+            if (value === 'N/A') return 'N/A';
+            return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
+        };
+
+        // Função específica para campos que devem estar sempre em maiúscula
+        const processFieldUpperCase = (value, defaultValue = '') => {
+            if (!value || value === '') return defaultValue;
+            if (value === 'N/A') return 'N/A';
+            return value.toUpperCase();
+        };
+
+        // Função específica para processar números (não aplica transformações de texto)
+        const processNumber = (value, defaultValue = '') => {
+            if (!value || value === '') return defaultValue;
+            if (value === 'N/A') return 'N/A';
+            let cleanValue = value.replace(/\*\*/g, '').replace(/[^\d.-]/g, '');
+            return cleanValue;
+        };
+
+        let extractedData = {
+            tipoEquipamento,
+            tipoInstrumento,
+            marcaPipeta: processFieldUpperCase(marca),
+            modeloPipeta: processFieldUpperCase(modelo),
+            numeroPipeta: processFieldUpperCase(serie),
+            numeroIdentificacao: processFieldUpperCase(numeroIdentificacao, 'N/A'),
+            numeroCertificado: processNumber(numeroOrdenacao),
+            capacidade: volume || '',
+            unidadeCapacidade: 'µL',
+            faixaIndicacao: pontosIndicacao || '',
+            unidadeFaixaIndicacao: 'µL',
+            faixaCalibrada: pontosCalibirados || pontosIndicacao || '',
+            unidadeFaixaCalibrada: 'µL'
+        };
+
+        // Para repipetador, extrair seringas
+        if (tipoEquipamento === 'repipetador') {
+            const seringas = extractSeringas(text);
+            if (seringas.length === 0) {
+                throw new Error('Nenhuma seringa encontrada para o repipetador. Verifique a seção "SERINGAS UTILIZADAS".');
+            }
+            extractedData.seringas = seringas;
+            extractedData.pontosCalibra = [];
+        } else {
+            // Para micropipetas e buretas, extrair pontos de calibração
+            const pontos = extractCalibrationPoints(text);
+            if (pontos.length === 0) {
+                throw new Error('Nenhum ponto de calibração encontrado. Verifique a seção "PONTOS DE CALIBRAÇÃO".');
+            }
+
+            // Para multicanal, criar pontos apenas para o Canal Mestre (Canal 1)
+            if (tipoInstrumento === 'multicanal') {
+                const quantidadeCanais = extractChannelCount(text);
+                extractedData.quantidadeCanais = quantidadeCanais;
+
+                const pontosCanalMestre = pontos.map((ponto, index) => ({
+                    ...ponto,
+                    id: Date.now() + Math.random(),
+                    canal: 1,
+                    pontoPosicao: index + 1
+                }));
+
+                extractedData.pontosCalibra = pontosCanalMestre;
+            } else {
+                extractedData.pontosCalibra = pontos;
+            }
+        }
+
+        return extractedData;
+    }, [extractFieldValue, extractInstrumentType, extractChannelCount, extractCalibrationPoints, extractSeringas]);
+
+    // Função para extrair dados em lote (múltiplos certificados)
+    const extractBatchPipetteData = useCallback(async (text) => {
+        setIsProcessing(true);
+        setError('');
+
+        try {
+            // Simular processamento
+            await new Promise(resolve => setTimeout(resolve, 1500));
+
+            if (!text || text.trim().length < 20) {
+                throw new Error('Texto muito curto. Por favor, forneça os textos do Notion.');
+            }
+
+            // Dividir o texto com base na palavra "INSTRUMENTO:"
+            // Precisamos garantir que não percamos a primeira parte e reconstruir corretamente
+            const partes = text.split(/(?=INSTRUMENTO:)/i).filter(p => p.trim().length > 20);
+
+            if (partes.length === 0) {
+                throw new Error('Nenhum instrumento encontrado. Certifique-se de usar o formato padronizado.');
+            }
+
+            const resultados = partes.map((parte, index) => {
+                try {
+                    return extractSingleData(parte);
+                } catch (err) {
+                    throw new Error(`Erro no instrumento ${index + 1}: ${err.message}`);
+                }
+            });
+
+            return resultados;
+
+        } catch (err) {
+            setError(err.message);
+            throw err;
+        } finally {
+            setIsProcessing(false);
+        }
+    }, [extractSingleData]);
+
     return {
         extractPipetteData,
+        extractBatchPipetteData,
         isProcessing,
         error,
         setError

@@ -79,6 +79,7 @@ const AIChatAssistant = ({
   stopAnimation,
   progress,
   currentField,
+  onBatchModeChange,
 }) => {
   // ============================================================================
   // ESTADO DO COMPONENTE
@@ -87,6 +88,14 @@ const AIChatAssistant = ({
   // Estados de interface
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
+  const [isBatchMode, setIsBatchMode] = useState(false);
+
+  // Notificar componente pai sobre a mudança de modo
+  useEffect(() => {
+    if (typeof onBatchModeChange === "function") {
+      onBatchModeChange(isBatchMode);
+    }
+  }, [isBatchMode, onBatchModeChange]);
 
   // Estados de entrada de dados
   const [inputMessage, setInputMessage] = useState("");
@@ -99,8 +108,13 @@ const AIChatAssistant = ({
   // HOOKS CUSTOMIZADOS
   // ============================================================================
 
-  const { extractPipetteData, isProcessing, error, setError } =
-    useDataExtraction();
+  const {
+    extractPipetteData,
+    extractBatchPipetteData,
+    isProcessing,
+    error,
+    setError,
+  } = useDataExtraction();
 
   // ============================================================================
   // REFS
@@ -215,34 +229,67 @@ const AIChatAssistant = ({
       );
 
       try {
-        // Extrair dados com IA
-        const extractedData = await extractPipetteData(userInput);
+        if (isBatchMode) {
+          // Extrair dados em lote
+          const extractedBatchData = await extractBatchPipetteData(userInput);
 
-        // Remover mensagem de processamento
-        setMessages((prev) =>
-          prev.filter((m) => m.id !== processingMessage.id),
-        );
-
-        // Adicionar mensagem de sucesso
-        const successMessage = generateSuccessMessage(extractedData);
-        addMessageToChat("assistant", successMessage);
-
-        // Aplicar dados extraídos
-        if (onDataExtracted) {
-          onDataExtracted(extractedData, userInput);
-        }
-
-        // Adicionar mensagem final e fechar chat
-        setTimeout(() => {
-          addMessageToChat(
-            "assistant",
-            "🎉 Formulário preenchido com sucesso! Você pode revisar os dados e gerar o certificado.",
+          // Remover mensagem de processamento
+          setMessages((prev) =>
+            prev.filter((m) => m.id !== processingMessage.id),
           );
 
+          // Adicionar mensagem de sucesso
+          addMessageToChat(
+            "assistant",
+            `✅ Perfeito! Identifiquei **${extractedBatchData.length}** certificados.\n\n🚀 Processando geração em lote...`,
+          );
+
+          // Aplicar dados extraídos
+          if (onDataExtracted) {
+            onDataExtracted(extractedBatchData, userInput);
+          }
+
+          // Adicionar mensagem final e fechar chat
           setTimeout(() => {
-            setIsOpen(false);
-          }, CHAT_CONFIG.AUTO_CLOSE_DELAY);
-        }, CHAT_CONFIG.SUCCESS_MESSAGE_DELAY);
+            addMessageToChat(
+              "assistant",
+              "🎉 Dados processados! Agora você pode gerar todos os certificados em PDF de uma vez.",
+            );
+
+            setTimeout(() => {
+              setIsOpen(false);
+            }, CHAT_CONFIG.AUTO_CLOSE_DELAY);
+          }, CHAT_CONFIG.SUCCESS_MESSAGE_DELAY);
+        } else {
+          // Extrair dados único
+          const extractedData = await extractPipetteData(userInput);
+
+          // Remover mensagem de processamento
+          setMessages((prev) =>
+            prev.filter((m) => m.id !== processingMessage.id),
+          );
+
+          // Adicionar mensagem de sucesso
+          const successMessage = generateSuccessMessage(extractedData);
+          addMessageToChat("assistant", successMessage);
+
+          // Aplicar dados extraídos
+          if (onDataExtracted) {
+            onDataExtracted(extractedData, userInput);
+          }
+
+          // Adicionar mensagem final e fechar chat
+          setTimeout(() => {
+            addMessageToChat(
+              "assistant",
+              "🎉 Formulário preenchido com sucesso! Você pode revisar os dados e gerar o certificado.",
+            );
+
+            setTimeout(() => {
+              setIsOpen(false);
+            }, CHAT_CONFIG.AUTO_CLOSE_DELAY);
+          }, CHAT_CONFIG.SUCCESS_MESSAGE_DELAY);
+        }
       } catch (processingError) {
         // Remover mensagem de processamento
         setMessages((prev) =>
@@ -491,69 +538,93 @@ const AIChatAssistant = ({
                   </div>
                 </div>
 
-                {/* Controle de Velocidade de Preenchimento */}
-                {animationSpeed !== undefined && setAnimationSpeed && (
-                  <div className="mt-3 px-2 py-2 bg-gray-50 rounded-lg border">
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="text-xs font-medium text-gray-700">
-                        Velocidade de Preenchimento
-                      </label>
-                      <span className="text-xs text-gray-500">
-                        {ANIMATION_CONFIG.SPEED_LABELS[animationSpeed] ||
-                          "Normal"}
-                      </span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-xs text-gray-500">Lenta</span>
-                      <input
-                        type="range"
-                        min="1"
-                        max="3"
-                        value={animationSpeed}
-                        onChange={(e) =>
-                          setAnimationSpeed(Number(e.target.value))
-                        }
-                        className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
-                        style={{
-                          background: `linear-gradient(to right, ${
-                            AI_COLORS.PRIMARY_GREEN
-                          } 0%, ${AI_COLORS.PRIMARY_GREEN} ${
-                            ((animationSpeed - 1) / 2) * 100
-                          }%, #e5e7eb ${
-                            ((animationSpeed - 1) / 2) * 100
-                          }%, #e5e7eb 100%)`,
-                        }}
-                      />
-                      <span className="text-xs text-gray-500">Rápida</span>
-                    </div>
-                    {isAnimating && (
-                      <div className="mt-2 flex items-center justify-between">
-                        <div className="text-xs text-gray-600">
-                          {currentField && `Preenchendo: ${currentField}`}
-                        </div>
-                        <button
-                          onClick={stopAnimation}
-                          className="text-xs text-red-600 hover:text-red-800 font-medium"
-                        >
-                          Parar
-                        </button>
-                      </div>
-                    )}
-                    {progress !== undefined && progress > 0 && (
-                      <div className="mt-2">
-                        <div className="w-full bg-gray-200 rounded-full h-1.5">
-                          <div
-                            className="bg-green-600 h-1.5 rounded-full transition-all duration-300"
-                            style={{ width: `${progress}%` }}
-                          ></div>
-                        </div>
-                        <div className="text-xs text-gray-500 text-center mt-1">
-                          {Math.round(progress)}% concluído
-                        </div>
-                      </div>
-                    )}
+                {/* Toggle para Modo Lote (Batch) */}
+                <div className="mt-3 px-2 py-2 bg-gray-50 rounded-lg border flex items-center justify-between">
+                  <div className="flex flex-col">
+                    <span className="text-xs font-medium text-gray-700">
+                      Modo de Geração em Lote
+                    </span>
+                    <span className="text-[10px] text-gray-500">
+                      Gerar múltiplos certificados de uma vez
+                    </span>
                   </div>
-                )}
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="sr-only peer"
+                      checked={isBatchMode}
+                      onChange={(e) => setIsBatchMode(e.target.checked)}
+                      disabled={isAnimating || isProcessing}
+                    />
+                    <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-green-500"></div>
+                  </label>
+                </div>
+
+                {/* Controle de Velocidade de Preenchimento */}
+                {!isBatchMode &&
+                  animationSpeed !== undefined &&
+                  setAnimationSpeed && (
+                    <div className="mt-3 px-2 py-2 bg-gray-50 rounded-lg border">
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-xs font-medium text-gray-700">
+                          Velocidade de Preenchimento
+                        </label>
+                        <span className="text-xs text-gray-500">
+                          {ANIMATION_CONFIG.SPEED_LABELS[animationSpeed] ||
+                            "Normal"}
+                        </span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-xs text-gray-500">Lenta</span>
+                        <input
+                          type="range"
+                          min="1"
+                          max="3"
+                          value={animationSpeed}
+                          onChange={(e) =>
+                            setAnimationSpeed(Number(e.target.value))
+                          }
+                          className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
+                          style={{
+                            background: `linear-gradient(to right, ${
+                              AI_COLORS.PRIMARY_GREEN
+                            } 0%, ${AI_COLORS.PRIMARY_GREEN} ${
+                              ((animationSpeed - 1) / 2) * 100
+                            }%, #e5e7eb ${
+                              ((animationSpeed - 1) / 2) * 100
+                            }%, #e5e7eb 100%)`,
+                          }}
+                        />
+                        <span className="text-xs text-gray-500">Rápida</span>
+                      </div>
+                      {isAnimating && (
+                        <div className="mt-2 flex items-center justify-between">
+                          <div className="text-xs text-gray-600">
+                            {currentField && `Preenchendo: ${currentField}`}
+                          </div>
+                          <button
+                            onClick={stopAnimation}
+                            className="text-xs text-red-600 hover:text-red-800 font-medium"
+                          >
+                            Parar
+                          </button>
+                        </div>
+                      )}
+                      {progress !== undefined && progress > 0 && (
+                        <div className="mt-2">
+                          <div className="w-full bg-gray-200 rounded-full h-1.5">
+                            <div
+                              className="bg-green-600 h-1.5 rounded-full transition-all duration-300"
+                              style={{ width: `${progress}%` }}
+                            ></div>
+                          </div>
+                          <div className="text-xs text-gray-500 text-center mt-1">
+                            {Math.round(progress)}% concluído
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                 <div className="mt-2 text-xs text-gray-500 text-center">
                   Pressione Enter para enviar • Shift+Enter para nova linha
