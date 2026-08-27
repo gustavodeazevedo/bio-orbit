@@ -2,13 +2,14 @@ import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { Mail, ArrowLeft } from "lucide-react";
+import { AuthFormSkeleton } from "../components/SkeletonLoader";
 import "../styles/Auth.css";
 
 const RecuperarSenhaPage = () => {
   const [email, setEmail] = useState("");
   const [emailError, setEmailError] = useState(null);
   const [success, setSuccess] = useState(false);
-  const { requestPasswordReset, error } = useAuth();
+  const { requestPasswordReset, error, loading } = useAuth();
   const navigate = useNavigate();
 
   const handleChange = (e) => {
@@ -40,9 +41,9 @@ const RecuperarSenhaPage = () => {
       setSuccess(true);
     } catch (err) {
       console.error("Erro ao solicitar recuperação de senha:", err);
-      // O erro global já é tratado pelo contexto de autenticação
     }
   };
+
   return (
     <div className="login-container">
       <div className="login-form">
@@ -58,7 +59,12 @@ const RecuperarSenhaPage = () => {
 
         {error && <div className="error-message">{error}</div>}
 
-        {success ? (
+        {loading ? (
+          <AuthFormSkeleton
+            fields={1}
+            note="Enviando a solicitação de recuperação e acordando o serviço."
+          />
+        ) : success ? (
           <div>
             <div className="success-message">
               Um email com instruções para redefinir sua senha foi enviado para{" "}
@@ -79,7 +85,6 @@ const RecuperarSenhaPage = () => {
             </p>
 
             <form onSubmit={handleSubmit} style={{ width: "100%" }}>
-              {" "}
               <div className="input-group">
                 <div className="input-wrapper">
                   <Mail className="input-icon" />
@@ -98,7 +103,7 @@ const RecuperarSenhaPage = () => {
                   )}
                 </div>
               </div>
-              <button type="submit" className="login-button">
+              <button type="submit" className="login-button" disabled={loading}>
                 ENVIAR INSTRUÇÕES
               </button>
             </form>
