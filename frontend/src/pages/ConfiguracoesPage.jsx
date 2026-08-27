@@ -3,6 +3,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import authService from "../services/authService";
 import configuracaoService from "../services/configuracaoService";
+import { CertificationPatternsSkeleton } from "../components/SkeletonLoader";
 import {
   ArrowLeft,
   Save,
@@ -40,6 +41,7 @@ const ConfiguracoesPage = () => {
   // Estado separado para padrões (global)
   const [padroesUtilizados, setPadroesUtilizados] = useState("");
   const [padroesOriginais, setPadroesOriginais] = useState("");
+  const [configLoading, setConfigLoading] = useState(true);
 
   // Estados de controle
   const [hasChanges, setHasChanges] = useState(false);
@@ -56,6 +58,8 @@ const ConfiguracoesPage = () => {
   // Carregar dados do usuário e configurações globais
   useEffect(() => {
     const loadData = async () => {
+      setConfigLoading(true);
+
       // Carregar dados do usuário
       if (user) {
         setFormData({
@@ -76,6 +80,8 @@ const ConfiguracoesPage = () => {
         setPadroesOriginais(config.padroesUtilizados || "");
       } catch (error) {
         console.error("Erro ao carregar configurações:", error);
+      } finally {
+        setConfigLoading(false);
       }
     };
 
@@ -769,47 +775,53 @@ const ConfiguracoesPage = () => {
               <form onSubmit={handleSave} className="space-y-6">
                 {/* Card de Padrões */}
                 <div className="bg-card rounded-xl border border-border p-6">
-                  <div className="flex items-center gap-4 mb-6">
-                    <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
-                      <FileText className="h-8 w-8 text-primary" />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold text-foreground">
-                        Padrões de Certificação
-                      </h3>
-                      <p className="text-sm text-muted-foreground">
-                        Configure padrões globais para todos os certificados
-                      </p>
-                    </div>
-                  </div>
+                  {configLoading ? (
+                    <CertificationPatternsSkeleton />
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-4 mb-6">
+                        <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
+                          <FileText className="h-8 w-8 text-primary" />
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-semibold text-foreground">
+                            Padrões de Certificação
+                          </h3>
+                          <p className="text-sm text-muted-foreground">
+                            Configure padrões globais para todos os certificados
+                          </p>
+                        </div>
+                      </div>
 
-                  <div>
-                    <label
-                      htmlFor="padroesUtilizados"
-                      className="block text-sm font-medium text-foreground mb-2"
-                    >
-                      Padrões Utilizados
-                    </label>
-                    <p className="text-xs text-muted-foreground mb-3">
-                      Este texto aparecerá na seção "Padrões Utilizados" de
-                      todos os certificados. Inclua equipamentos, certificados
-                      RBC e datas de validade.
-                    </p>
-                    <textarea
-                      id="padroesUtilizados"
-                      name="padroesUtilizados"
-                      value={padroesUtilizados}
-                      onChange={(e) => setPadroesUtilizados(e.target.value)}
-                      rows={6}
-                      className="w-full px-4 py-3 border border-border rounded-lg transition-colors bg-background focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 resize-vertical"
-                      style={{ minHeight: "150px" }}
-                      placeholder="Exemplo:&#10;Termohigrômetro Digital HT600 Instrutherm, Certificado RBC Nº CAL – A 15694/25, (Validade 08/2026).&#10;Balança Analítica Metter Toledo SAG250, Certificado RBC Nº CAL – A 15695/25, (Validade 08/2026)."
-                    />
-                    <p className="text-xs text-muted-foreground mt-2">
-                      💡 Use o formato (Validade MM/AAAA) para ativar
-                      notificações automáticas de vencimento
-                    </p>
-                  </div>
+                      <div>
+                        <label
+                          htmlFor="padroesUtilizados"
+                          className="block text-sm font-medium text-foreground mb-2"
+                        >
+                          Padrões Utilizados
+                        </label>
+                        <p className="text-xs text-muted-foreground mb-3">
+                          Este texto aparecerá na seção "Padrões Utilizados" de
+                          todos os certificados. Inclua equipamentos,
+                          certificados RBC e datas de validade.
+                        </p>
+                        <textarea
+                          id="padroesUtilizados"
+                          name="padroesUtilizados"
+                          value={padroesUtilizados}
+                          onChange={(e) => setPadroesUtilizados(e.target.value)}
+                          rows={6}
+                          className="w-full px-4 py-3 border border-border rounded-lg transition-colors bg-background focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 resize-vertical"
+                          style={{ minHeight: "150px" }}
+                          placeholder="Exemplo:&#10;Termohigrômetro Digital HT600 Instrutherm, Certificado RBC Nº CAL – A 15694/25, (Validade 08/2026).&#10;Balança Analítica Metter Toledo SAG250, Certificado RBC Nº CAL – A 15695/25, (Validade 08/2026)."
+                        />
+                        <p className="text-xs text-muted-foreground mt-2">
+                          💡 Use o formato (Validade MM/AAAA) para ativar
+                          notificações automáticas de vencimento
+                        </p>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* Preview Card */}

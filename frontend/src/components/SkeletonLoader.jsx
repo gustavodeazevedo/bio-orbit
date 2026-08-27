@@ -149,6 +149,76 @@ export const SearchSkeleton = () => {
   );
 };
 
+// Skeleton contextual para formulários de autenticação
+export const AuthFormSkeleton = ({ fields = 2, note = "" }) => {
+  return (
+    <SkeletonTheme baseColor="#f3f4f6" highlightColor="#e5e7eb">
+      <div className="w-full space-y-4">
+        <div className="rounded-xl border border-primary/10 bg-primary/5 p-4">
+          <div className="flex items-start gap-3">
+            <div className="mt-1 h-3 w-3 rounded-full bg-primary animate-pulse flex-shrink-0" />
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-gray-800">
+                Aguardando resposta do servidor
+              </p>
+              <p className="text-xs text-gray-500">
+                {note || "O backend pode estar acordando no primeiro acesso."}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          {Array.from({ length: fields }).map((_, index) => (
+            <div key={index} className="space-y-2">
+              <Skeleton height={14} width="28%" />
+              <Skeleton height={44} width="100%" borderRadius={8} />
+            </div>
+          ))}
+        </div>
+
+        <Skeleton height={44} width="100%" borderRadius={8} />
+
+        <div className="space-y-2 pt-1">
+          <Skeleton height={12} width="70%" />
+          <Skeleton height={12} width="55%" />
+        </div>
+      </div>
+    </SkeletonTheme>
+  );
+};
+
+// Skeleton contextual para o card de padrões de certificação
+export const CertificationPatternsSkeleton = () => {
+  return (
+    <SkeletonTheme baseColor="#f3f4f6" highlightColor="#e5e7eb">
+      <div className="w-full space-y-4">
+        <div className="rounded-xl border border-primary/10 bg-primary/5 p-4">
+          <div className="flex items-start gap-3">
+            <div className="mt-1 h-3 w-3 rounded-full bg-primary animate-pulse flex-shrink-0" />
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-gray-800">
+                Carregando padrões de certificação
+              </p>
+              <p className="text-xs text-gray-500">
+                Estamos buscando as configurações globais para preencher os
+                certificados.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <Skeleton height={14} width="30%" />
+          <Skeleton height={14} width="85%" />
+          <Skeleton height={180} width="100%" borderRadius={12} />
+          <Skeleton height={12} width="68%" />
+        </div>
+      </div>
+    </SkeletonTheme>
+  );
+};
+
 export default {
   TableRowSkeleton,
   TableSkeleton,
@@ -158,4 +228,6 @@ export default {
   ButtonSkeleton,
   InputSkeleton,
   SearchSkeleton,
+  AuthFormSkeleton,
+  CertificationPatternsSkeleton,
 };
