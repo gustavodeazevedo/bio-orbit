@@ -4,7 +4,7 @@ class PresenceService {
     constructor() {
         this.heartbeatInterval = null;
         this.HEARTBEAT_INTERVAL = 30000; // 30 segundos
-        this.INACTIVE_THRESHOLD = 60000; // 1 minuto para considerar inativo
+        this.INACTIVE_THRESHOLD = 90000; // 1 minuto e 30 segundos para considerar inativo
     }
 
     // Iniciar rastreamento de presença
@@ -64,7 +64,7 @@ class PresenceService {
             return response.data;
         } catch (error) {
             console.error('❌ Erro ao buscar usuários ativos:', error.response?.data || error.message);
-            return [];
+            throw error;
         }
     }
 }

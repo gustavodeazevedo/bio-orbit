@@ -65,6 +65,7 @@ const DashboardPage = () => {
       setActiveUsers(usersWithColors);
     } catch (error) {
       console.error("❌ Erro ao carregar usuários ativos:", error);
+      // Mantém o último estado conhecido para não mostrar zero por falha transitória.
     } finally {
       setLoadingUsers(false);
     }
@@ -95,7 +96,7 @@ const DashboardPage = () => {
               setTimeout(scheduleNextUpdate, 30000);
             }
           },
-          { timeout: 32000 }
+          { timeout: 32000 },
         ); // Timeout de segurança
       } else {
         setTimeout(() => {
@@ -178,7 +179,7 @@ const DashboardPage = () => {
     try {
       await notificacaoService.marcarComoLida(id);
       setNotifications((prev) =>
-        prev.map((n) => (n._id === id ? { ...n, lida: true } : n))
+        prev.map((n) => (n._id === id ? { ...n, lida: true } : n)),
       );
     } catch (error) {
       console.error("Erro ao marcar notificação como lida:", error);
@@ -230,7 +231,7 @@ const DashboardPage = () => {
         onClick: handleConfigClick,
       },
     ],
-    [handleConfigClick]
+    [handleConfigClick],
   );
 
   return (
