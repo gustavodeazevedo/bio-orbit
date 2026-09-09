@@ -3,6 +3,9 @@ const { Resend } = require('resend');
 // Inicializar Resend com a chave da API
 const resend = new Resend(process.env.RESEND_API_KEY);
 
+// A Resend determina quais destinatários o remetente configurado pode alcançar.
+const getSender = () => process.env.RESEND_FROM_EMAIL?.trim() || 'BioOrbit <onboarding@resend.dev>';
+
 /**
  * Serviço de envio de emails usando Resend
  */
@@ -16,7 +19,7 @@ const emailService = {
     async sendPasswordResetEmail(email, nome, resetUrl) {
         try {
             const { data, error } = await resend.emails.send({
-                from: process.env.RESEND_FROM_EMAIL || 'BioOrbit <onboarding@resend.dev>',
+                from: getSender(),
                 to: [email],
                 subject: 'Recuperação de Senha - BioOrbit',
                 html: `
@@ -84,7 +87,7 @@ const emailService = {
             return data;
         } catch (error) {
             console.error('Erro no serviço de email:', error);
-            throw new Error('Falha ao enviar email de recuperação');
+            throw new Error('Falha ao enviar email de recuperação', { cause: error });
         }
     },
 
@@ -96,7 +99,7 @@ const emailService = {
     async sendPasswordResetConfirmation(email, nome) {
         try {
             const { data, error } = await resend.emails.send({
-                from: process.env.RESEND_FROM_EMAIL || 'BioOrbit <onboarding@resend.dev>',
+                from: getSender(),
                 to: [email],
                 subject: 'Senha Alterada com Sucesso - BioOrbit',
                 html: `

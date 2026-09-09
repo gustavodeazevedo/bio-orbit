@@ -126,6 +126,12 @@ const updateUsuarioPerfil = async (req, res) => {
         const usuario = await Usuario.findById(req.usuario._id);
 
         if (usuario) {
+            if (req.body.email !== undefined && req.body.email !== usuario.email) {
+                return res.status(400).json({
+                    message: 'O e-mail da conta não pode ser alterado pelo perfil.'
+                });
+            }
+
             // Se está tentando alterar a senha, verificar senha atual
             if (req.body.novaSenha) {
                 if (!req.body.senhaAtual) {
@@ -148,7 +154,6 @@ const updateUsuarioPerfil = async (req, res) => {
 
             // Atualizar outros campos
             usuario.nome = req.body.nome || usuario.nome;
-            usuario.email = req.body.email || usuario.email;
             usuario.cargo = req.body.cargo || usuario.cargo;
             usuario.setor = req.body.setor || usuario.setor;
 
@@ -248,6 +253,39 @@ const deleteUsuario = async (req, res) => {
         }
     } catch (error) {
         res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc    Excluir a própria conta
+// @route   DELETE /api/usuarios/perfil
+// @access  Private
+const deleteMinhaConta = async (req, res) => {
+    try {
+        const { senha } = req.body;
+
+        if (!senha) {
+            return res.status(400).json({ message: 'A senha atual é obrigatória' });
+        }
+
+        const usuario = await Usuario.findById(req.usuario._id);
+
+        if (!usuario) {
+            return res.status(404).json({ message: 'Usuário não encontrado' });
+        }
+
+        const senhaValida = await usuario.matchPassword(senha);
+
+        if (!senhaValida) {
+            return res.status(401).json({ message: 'Senha atual incorreta' });
+        }
+
+        await ResetToken.deleteMany({ usuario: usuario._id });
+        await usuario.deleteOne();
+
+        res.json({ message: 'Conta excluída com sucesso' });
+    } catch (error) {
+        console.error('Erro ao excluir a própria conta:', error);
+        res.status(500).json({ message: 'Não foi possível excluir a conta' });
     }
 };
 
@@ -432,6 +470,7 @@ module.exports = {
     getUsuarioById,
     updateUsuario,
     deleteUsuario,
+    deleteMinhaConta,
     updateHeartbeat,
     setOffline,
     getUsuariosAtivos,

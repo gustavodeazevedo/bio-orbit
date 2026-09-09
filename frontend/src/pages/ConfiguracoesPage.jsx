@@ -20,17 +20,17 @@ import {
   Building2,
   Shield,
   Bell,
+  Trash2,
 } from "lucide-react";
 
 const ConfiguracoesPage = () => {
-  const { user } = useAuth();
+  const { user, deleteAccount } = useAuth();
   const navigate = useNavigate();
 
   // Estados do formulário
   const [activeTab, setActiveTab] = useState("perfil");
   const [formData, setFormData] = useState({
     nome: "",
-    email: "",
     cargo: "",
     setor: "",
     senhaAtual: "",
@@ -54,6 +54,11 @@ const ConfiguracoesPage = () => {
   const [loading, setLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   // Carregar dados do usuário e configurações globais
   useEffect(() => {
@@ -64,7 +69,6 @@ const ConfiguracoesPage = () => {
       if (user) {
         setFormData({
           nome: user.nome || "",
-          email: user.email || "",
           cargo: user.cargo || "",
           setor: user.setor || "",
           senhaAtual: "",
@@ -94,14 +98,12 @@ const ConfiguracoesPage = () => {
 
     const currentUserProfile = {
       nome: user.nome || "",
-      email: user.email || "",
       cargo: user.cargo || "",
       setor: user.setor || "",
     };
 
     const changed =
       formData.nome !== currentUserProfile.nome ||
-      formData.email !== currentUserProfile.email ||
       formData.cargo !== currentUserProfile.cargo ||
       formData.setor !== currentUserProfile.setor ||
       padroesUtilizados !== padroesOriginais ||
@@ -121,13 +123,6 @@ const ConfiguracoesPage = () => {
       newErrors.nome = "Nome é obrigatório";
     } else if (formData.nome.trim().length < 3) {
       newErrors.nome = "Nome deve ter pelo menos 3 caracteres";
-    }
-
-    // Validar email
-    if (!formData.email.trim()) {
-      newErrors.email = "Email é obrigatório";
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = "Email inválido";
     }
 
     // Validar cargo
@@ -184,14 +179,12 @@ const ConfiguracoesPage = () => {
       // 1. Atualizar dados do usuário (se mudaram)
       const currentUserProfile = {
         nome: user.nome || "",
-        email: user.email || "",
         cargo: user.cargo || "",
         setor: user.setor || "",
       };
 
       const userChanged =
         formData.nome !== currentUserProfile.nome ||
-        formData.email !== currentUserProfile.email ||
         formData.cargo !== currentUserProfile.cargo ||
         formData.setor !== currentUserProfile.setor ||
         formData.novaSenha;
@@ -199,7 +192,6 @@ const ConfiguracoesPage = () => {
       if (userChanged) {
         const updateData = {
           nome: formData.nome,
-          email: formData.email,
           cargo: formData.cargo,
           setor: formData.setor,
         };
@@ -257,6 +249,33 @@ const ConfiguracoesPage = () => {
   const handleDiscardChanges = () => {
     setShowExitConfirm(false);
     navigate("/dashboard");
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!deletePassword) {
+      setDeleteError("Digite sua senha atual para continuar.");
+      return;
+    }
+
+    if (deleteConfirmation !== "EXCLUIR") {
+      setDeleteError('Digite "EXCLUIR" para confirmar a ação.');
+      return;
+    }
+
+    setDeleteError("");
+    setDeletingAccount(true);
+
+    try {
+      await deleteAccount(deletePassword);
+      navigate("/login", { replace: true });
+    } catch (error) {
+      setDeleteError(
+        error.response?.data?.message ||
+          "Não foi possível excluir sua conta. Tente novamente.",
+      );
+    } finally {
+      setDeletingAccount(false);
+    }
   };
 
   // Handler de input
@@ -478,21 +497,17 @@ const ConfiguracoesPage = () => {
                         type="email"
                         id="email"
                         name="email"
-                        value={formData.email}
-                        onChange={handleInputChange}
-                        className={`w-full px-4 py-2.5 border rounded-lg transition-colors bg-background ${
-                          errors.email
-                            ? "border-red-500 focus:border-red-500"
-                            : "border-border focus:border-primary"
-                        } focus:outline-none focus:ring-2 focus:ring-primary/20`}
-                        placeholder="seu@email.com"
+                        value={user?.email || ""}
+                        readOnly
+                        aria-describedby="email-help"
+                        className="w-full px-4 py-2.5 border border-border rounded-lg bg-muted text-muted-foreground cursor-default focus:outline-none focus:ring-2 focus:ring-primary/20"
                       />
-                      {errors.email && (
-                        <p className="text-red-500 text-xs mt-1.5 flex items-center gap-1">
-                          <AlertCircle className="h-3 w-3" />
-                          {errors.email}
-                        </p>
-                      )}
+                      <p
+                        id="email-help"
+                        className="text-xs text-muted-foreground mt-1.5"
+                      >
+                        O e-mail da conta não pode ser alterado.
+                      </p>
                     </div>
 
                     {/* Cargo e Setor */}
@@ -568,9 +583,9 @@ const ConfiguracoesPage = () => {
                       </p>
                       <p
                         className="text-sm font-medium text-foreground truncate"
-                        title={formData.email}
+                        title={user?.email}
                       >
-                        {formData.email || "Não informado"}
+                        {user?.email || "Não informado"}
                       </p>
                     </div>
                   </div>
@@ -586,6 +601,34 @@ const ConfiguracoesPage = () => {
                       <p className="text-sm font-medium text-foreground">
                         {formData.cargo || "Não informado"}
                       </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-red-200 bg-red-50/60 p-6">
+                  <div className="flex items-start gap-4">
+                    <div className="h-12 w-12 rounded-lg bg-red-100 flex items-center justify-center flex-shrink-0">
+                      <Trash2 className="h-6 w-6 text-red-600" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-base font-semibold text-red-900">
+                        Excluir conta
+                      </h3>
+                      <p className="text-sm text-red-800/80 mt-1 mb-4">
+                        Essa ação remove permanentemente seu acesso e não pode
+                        ser desfeita.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDeleteError("");
+                          setShowDeleteAccountModal(true);
+                        }}
+                        className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors font-medium inline-flex items-center gap-2"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Excluir minha conta
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -893,6 +936,99 @@ const ConfiguracoesPage = () => {
                   className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors font-medium"
                 >
                   Descartar Alterações
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDeleteAccountModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 bg-black/40 backdrop-blur-sm"
+            onClick={() => !deletingAccount && setShowDeleteAccountModal(false)}
+          ></div>
+          <div className="relative bg-card border border-red-200 rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="p-6">
+              <div className="flex items-start gap-4">
+                <div className="h-12 w-12 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                  <Trash2 className="h-6 w-6 text-red-600" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold text-foreground">
+                    Excluir sua conta?
+                  </h3>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    Esta ação é irreversível. Todos os seus dados serão removidos
+                    permanentemente do banco de dados.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-4 mt-6">
+                <div>
+                  <label
+                    htmlFor="deletePassword"
+                    className="block text-sm font-medium text-foreground mb-2"
+                  >
+                    Senha atual
+                  </label>
+                  <input
+                    id="deletePassword"
+                    type="password"
+                    value={deletePassword}
+                    onChange={(event) => setDeletePassword(event.target.value)}
+                    className="w-full px-4 py-2.5 border border-border rounded-lg bg-background focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/20"
+                    placeholder="Digite sua senha atual"
+                    disabled={deletingAccount}
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="deleteConfirmation"
+                    className="block text-sm font-medium text-foreground mb-2"
+                  >
+                    Digite <span className="font-bold">EXCLUIR</span> para
+                    confirmar
+                  </label>
+                  <input
+                    id="deleteConfirmation"
+                    type="text"
+                    value={deleteConfirmation}
+                    onChange={(event) =>
+                      setDeleteConfirmation(event.target.value.toUpperCase())
+                    }
+                    className="w-full px-4 py-2.5 border border-border rounded-lg bg-background focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/20"
+                    placeholder="EXCLUIR"
+                    disabled={deletingAccount}
+                  />
+                </div>
+
+                {deleteError && (
+                  <p className="text-sm text-red-600" role="alert">
+                    {deleteError}
+                  </p>
+                )}
+              </div>
+
+              <div className="flex items-center justify-end gap-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteAccountModal(false)}
+                  disabled={deletingAccount}
+                  className="px-4 py-2 border border-border rounded-lg hover:bg-muted transition-colors text-foreground font-medium disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeleteAccount}
+                  disabled={deletingAccount}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors font-medium disabled:opacity-50"
+                >
+                  {deletingAccount ? "Excluindo..." : "Excluir conta"}
                 </button>
               </div>
             </div>
