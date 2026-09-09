@@ -4,13 +4,13 @@
 
 <div align="center">
 
-#  BioOrbit
+# BioOrbit
 
 **Sistema Inteligente de Calibração e Certificação para Equipamentos de Laboratório**
 
 O BioOrbit é uma plataforma completa desenvolvida para revolucionar o processo de calibração e emissão de certificados de equipamentos de laboratório voltados para a biotecnologia molecular, oferecendo automação inteligente através de processamento avançado de dados.
 
-Configuração do envio de e-mails: [recuperação de senha com Resend](docs/recuperacao-de-senha.md).
+Configuração do envio de e-mails: [recuperação de senha com Gmail SMTP](docs/recuperacao-de-senha.md).
 
 > **💡 Desenvolvido com GitHub Copilot** - Este projeto demonstra o poder da programação assistida por IA, onde cada funcionalidade foi desenvolvida em parceria com inteligência artificial para máxima eficiência e qualidade de código.
 
