@@ -19,12 +19,13 @@ const DashboardPage = lazy(() => import("./pages/DashboardPage"));
 const ClientesPage = lazy(() => import("./pages/ClientesPage"));
 const ClienteFormPage = lazy(() => import("./pages/ClienteFormPage"));
 const SelecionarClientePage = lazy(
-  () => import("./pages/SelecionarClientePage")
+  () => import("./pages/SelecionarClientePage"),
 );
 const EmitirCertificadoPage = lazy(
-  () => import("./pages/EmitirCertificadoPage")
+  () => import("./pages/EmitirCertificadoPage"),
 );
 const ConfiguracoesPage = lazy(() => import("./pages/ConfiguracoesPage"));
+const StoragePage = lazy(() => import("./pages/StoragePage"));
 
 // Componente de loading
 const PageLoader = () => (
@@ -94,6 +95,9 @@ function App() {
 
               {/* Configurações - SEM wrapper */}
               <Route path="/configuracoes" element={<ConfiguracoesPage />} />
+
+              {/* Storage - SEM wrapper */}
+              <Route path="/storage" element={<StoragePage />} />
 
               {/* Rotas de clientes - com wrapper */}
               <Route path="/clientes" element={<ClientesPage />} />
