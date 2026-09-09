@@ -119,6 +119,7 @@ app.use('/api/admin/token', require('./routes/token'));
 app.use('/api/clientes', require('./routes/clientes'));
 app.use('/api/configuracoes', require('./routes/configuracoes'));
 app.use('/api/notificacoes', require('./routes/notificacoes'));
+app.use('/api/monitoramento', require('./routes/monitoramento'));
 
 // Rota de health check
 app.get('/health', (req, res) => {
