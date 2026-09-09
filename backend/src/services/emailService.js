@@ -7,7 +7,10 @@ const getAppPassword = () => process.env.EMAIL_APP_PASSWORD
     .replace(/\s+/g, '');
 
 const getTransporter = () => nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false,
+    requireTLS: true,
     auth: {
         user: getEmailUser(),
         pass: getAppPassword()
@@ -25,6 +28,10 @@ const escapeHtml = (value = '') => String(value)
 
 const sendMail = async ({ to, subject, html }) => {
     if (!getEmailUser() || !getAppPassword()) {
+        console.error('SMTP do Gmail não configurado:', {
+            hasEmailUser: Boolean(getEmailUser()),
+            hasAppPassword: Boolean(getAppPassword())
+        });
         throw new Error('Credenciais de email não configuradas');
     }
 

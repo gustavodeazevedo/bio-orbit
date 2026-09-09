@@ -40,7 +40,10 @@ test.each(['cadastro@example.net', 'novo-email@example.net'])(
         );
 
         expect(mockCreateTransport).toHaveBeenCalledWith({
-            service: 'gmail',
+            host: 'smtp.gmail.com',
+            port: 587,
+            secure: false,
+            requireTLS: true,
             auth: {
                 user: 'syngonium.br@gmail.com',
                 pass: 'apppasswordfortest'
