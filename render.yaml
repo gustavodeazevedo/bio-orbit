@@ -16,11 +16,10 @@ services:
         generateValue: true
       - key: CORPORATE_TOKEN
         sync: false
-      - key: RESEND_API_KEY
+      - key: EMAIL_USER
         sync: false
-      - key: RESEND_FROM_EMAIL
-        # A Resend restringe este remetente ao e-mail do titular da conta.
-        value: bioorbit@resend.dev
+      - key: EMAIL_APP_PASSWORD
+        sync: false
       - key: FRONTEND_URL
         value: https://bio-orbit.vercel.app
     healthCheckPath: /health

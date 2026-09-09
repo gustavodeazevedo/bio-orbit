@@ -352,6 +352,8 @@ const getUsuariosAtivos = async (req, res) => {
 // @route   POST /api/usuarios/reset-password
 // @access  Public
 const requestPasswordReset = async (req, res) => {
+    let resetToken;
+
     try {
         const { email } = req.body;
 
@@ -374,7 +376,7 @@ const requestPasswordReset = async (req, res) => {
         const token = crypto.randomBytes(32).toString('hex');
 
         // Salvar token no banco
-        await ResetToken.create({
+        resetToken = await ResetToken.create({
             usuario: usuario._id,
             token: token
         });
@@ -396,7 +398,19 @@ const requestPasswordReset = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Erro ao solicitar reset de senha:', error);
+        if (resetToken) {
+            try {
+                if (typeof resetToken.deleteOne === 'function') {
+                    await resetToken.deleteOne();
+                } else if (typeof ResetToken.deleteOne === 'function') {
+                    await ResetToken.deleteOne({ _id: resetToken._id });
+                }
+            } catch (cleanupError) {
+                console.error('Erro ao remover token após falha de envio:', cleanupError.message);
+            }
+        }
+
+        console.error('Erro ao solicitar reset de senha:', error.message);
         res.status(500).json({
             message: 'Erro ao processar solicitação. Tente novamente mais tarde.'
         });

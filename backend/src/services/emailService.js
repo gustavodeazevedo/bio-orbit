@@ -1,157 +1,134 @@
-const { Resend } = require('resend');
+const nodemailer = require('nodemailer');
 
-// Inicializar Resend com a chave da API
-const resend = new Resend(process.env.RESEND_API_KEY);
+const getTransporter = () => nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_APP_PASSWORD
+    }
+});
 
-// A Resend determina quais destinatários o remetente configurado pode alcançar.
-const getSender = () => process.env.RESEND_FROM_EMAIL?.trim() || 'BioOrbit <onboarding@resend.dev>';
+const getSender = () => `BioOrbit <${process.env.EMAIL_USER}>`;
+
+const escapeHtml = (value = '') => String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+
+const sendMail = async ({ to, subject, html }) => {
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_APP_PASSWORD) {
+        throw new Error('Credenciais de email não configuradas');
+    }
+
+    return getTransporter().sendMail({
+        from: getSender(),
+        to,
+        subject,
+        html
+    });
+};
 
 /**
- * Serviço de envio de emails usando Resend
+ * Envia email de recuperação de senha.
+ * @param {string} email - Email do destinatário
+ * @param {string} nome - Nome do usuário
+ * @param {string} resetUrl - URL completa de redefinição
  */
-const emailService = {
-    /**
-     * Envia email de recuperação de senha
-     * @param {string} email - Email do destinatário
-     * @param {string} nome - Nome do usuário
-     * @param {string} resetUrl - URL de recuperação com token
-     */
-    async sendPasswordResetEmail(email, nome, resetUrl) {
-        try {
-            const { data, error } = await resend.emails.send({
-                from: getSender(),
-                to: [email],
-                subject: 'Recuperação de Senha - BioOrbit',
-                html: `
-                    <!DOCTYPE html>
-                    <html lang="pt-BR">
-                    <head>
-                        <meta charset="UTF-8">
-                        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                        <title>Recuperação de Senha</title>
-                    </head>
-                    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-                        <div style="background-color: #81A030; padding: 20px; text-align: center; border-radius: 10px 10px 0 0;">
-                            <h1 style="color: white; margin: 0;">BioOrbit</h1>
+const sendPasswordResetEmail = async (email, nome, resetUrl) => {
+    const safeName = escapeHtml(nome);
+    const safeResetUrl = escapeHtml(resetUrl);
+
+    try {
+        const info = await sendMail({
+            to: email,
+            subject: 'Recuperação de senha - BioOrbit',
+            html: `
+                <!DOCTYPE html>
+                <html lang="pt-BR">
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>Recuperação de senha - BioOrbit</title>
+                </head>
+                <body style="margin:0;background:#f5f7f2;font-family:Arial,sans-serif;color:#4b5563;line-height:1.6;">
+                    <div style="max-width:600px;margin:0 auto;padding:32px 20px;">
+                        <div style="background:#90c72d;padding:22px;border-radius:12px 12px 0 0;text-align:center;">
+                            <h1 style="color:#fff;margin:0;font-size:24px;">BioOrbit</h1>
                         </div>
-                        <div style="background-color: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
-                            <h2 style="color: #81A030; margin-top: 0;">Recuperação de Senha</h2>
-                            <p>Olá <strong>${nome}</strong>,</p>
-                            <p>Recebemos uma solicitação para redefinir a senha da sua conta no <strong>BioOrbit</strong>.</p>
-                            <p>Clique no botão abaixo para criar uma nova senha:</p>
-                            <div style="text-align: center; margin: 30px 0;">
-                                <a href="${resetUrl}" 
-                                   style="background-color: #81A030; 
-                                          color: white; 
-                                          padding: 15px 30px; 
-                                          text-decoration: none; 
-                                          border-radius: 5px; 
-                                          display: inline-block;
-                                          font-weight: bold;">
-                                    Redefinir Senha
-                                </a>
+                        <div style="background:#fff;padding:32px;border:1px solid #e5e7eb;border-top:0;border-radius:0 0 12px 12px;">
+                            <h2 style="color:#374151;margin:0 0 16px;">Redefinição de senha</h2>
+                            <p>Olá, <strong>${safeName}</strong>.</p>
+                            <p>Recebemos uma solicitação para redefinir a senha da sua conta no BioOrbit.</p>
+                            <div style="text-align:center;margin:28px 0;">
+                                <a href="${safeResetUrl}" style="display:inline-block;background:#90c72d;color:#fff;padding:13px 24px;border-radius:8px;text-decoration:none;font-weight:bold;">Redefinir senha</a>
                             </div>
-                            <p style="color: #666; font-size: 14px;">
-                                Ou copie e cole este link no seu navegador:
-                            </p>
-                            <p style="background-color: #e9e9e9; padding: 10px; border-radius: 5px; word-break: break-all; font-size: 12px;">
-                                ${resetUrl}
-                            </p>
-                            <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
-                            <p style="color: #999; font-size: 12px;">
-                                <strong>⚠️ Importante:</strong><br>
-                                • Este link expira em <strong>1 hora</strong><br>
-                                • Se você não solicitou esta alteração, ignore este email<br>
-                                • Sua senha permanecerá inalterada
-                            </p>
-                            <p style="color: #999; font-size: 12px; margin-top: 20px;">
-                                Atenciosamente,<br>
-                                <strong>Equipe BioOrbit</strong>
-                            </p>
+                            <p style="font-size:13px;color:#6b7280;word-break:break-all;">Se o botão não funcionar, acesse:<br>${safeResetUrl}</p>
+                            <p style="font-size:13px;color:#6b7280;">Se você não solicitou esta alteração, ignore este e-mail. Sua senha permanecerá inalterada.</p>
                         </div>
-                        <div style="text-align: center; margin-top: 20px; color: #999; font-size: 12px;">
-                            <p>Bio Research do Brasil Instrumentação Científica Ltda</p>
-                            <p>Este é um email automático, por favor não responda.</p>
-                        </div>
-                    </body>
-                    </html>
-                `
-            });
+                    </div>
+                </body>
+                </html>
+            `
+        });
 
-            if (error) {
-                console.error('Erro ao enviar email com Resend:', error);
-                throw error;
-            }
-
-            console.log('Email enviado com sucesso via Resend:', data);
-            return data;
-        } catch (error) {
-            console.error('Erro no serviço de email:', error);
-            throw new Error('Falha ao enviar email de recuperação', { cause: error });
-        }
-    },
-
-    /**
-     * Envia email de confirmação após reset bem-sucedido
-     * @param {string} email - Email do destinatário
-     * @param {string} nome - Nome do usuário
-     */
-    async sendPasswordResetConfirmation(email, nome) {
-        try {
-            const { data, error } = await resend.emails.send({
-                from: getSender(),
-                to: [email],
-                subject: 'Senha Alterada com Sucesso - BioOrbit',
-                html: `
-                    <!DOCTYPE html>
-                    <html lang="pt-BR">
-                    <head>
-                        <meta charset="UTF-8">
-                        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                        <title>Senha Alterada</title>
-                    </head>
-                    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-                        <div style="background-color: #81A030; padding: 20px; text-align: center; border-radius: 10px 10px 0 0;">
-                            <h1 style="color: white; margin: 0;">BioOrbit</h1>
-                        </div>
-                        <div style="background-color: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
-                            <h2 style="color: #81A030; margin-top: 0;">✅ Senha Alterada com Sucesso</h2>
-                            <p>Olá <strong>${nome}</strong>,</p>
-                            <p>Sua senha foi alterada com sucesso!</p>
-                            <p>Agora você já pode fazer login com sua nova senha.</p>
-                            <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
-                            <p style="color: #999; font-size: 12px;">
-                                <strong>⚠️ Não reconhece esta alteração?</strong><br>
-                                Se você não realizou esta mudança, entre em contato imediatamente com nosso suporte.
-                            </p>
-                            <p style="color: #999; font-size: 12px; margin-top: 20px;">
-                                Atenciosamente,<br>
-                                <strong>Equipe BioOrbit</strong>
-                            </p>
-                        </div>
-                        <div style="text-align: center; margin-top: 20px; color: #999; font-size: 12px;">
-                            <p>Bio Research do Brasil Instrumentação Científica Ltda</p>
-                            <p>Este é um email automático, por favor não responda.</p>
-                        </div>
-                    </body>
-                    </html>
-                `
-            });
-
-            if (error) {
-                console.error('Erro ao enviar email de confirmação:', error);
-                // Não lançar erro aqui, pois a senha já foi alterada
-                return null;
-            }
-
-            console.log('Email de confirmação enviado:', data);
-            return data;
-        } catch (error) {
-            console.error('Erro ao enviar confirmação:', error);
-            // Não bloquear o processo se falhar
-            return null;
-        }
+        console.log('Email de recuperação enviado com sucesso:', info.messageId);
+        return info;
+    } catch (error) {
+        console.error('Erro ao enviar email de recuperação via Gmail SMTP:', error.message);
+        throw new Error('Falha ao enviar email de recuperação', { cause: error });
     }
 };
 
-module.exports = emailService;
+/**
+ * Envia confirmação após a redefinição da senha.
+ * @param {string} email - Email do destinatário
+ * @param {string} nome - Nome do usuário
+ */
+const sendPasswordResetConfirmation = async (email, nome) => {
+    const safeName = escapeHtml(nome);
+
+    try {
+        const info = await sendMail({
+            to: email,
+            subject: 'Senha alterada com sucesso - BioOrbit',
+            html: `
+                <!DOCTYPE html>
+                <html lang="pt-BR">
+                <head><meta charset="UTF-8"><title>Senha alterada - BioOrbit</title></head>
+                <body style="margin:0;background:#f5f7f2;font-family:Arial,sans-serif;color:#4b5563;line-height:1.6;">
+                    <div style="max-width:600px;margin:0 auto;padding:32px 20px;">
+                        <div style="background:#90c72d;padding:22px;border-radius:12px 12px 0 0;text-align:center;"><h1 style="color:#fff;margin:0;">BioOrbit</h1></div>
+                        <div style="background:#fff;padding:32px;border:1px solid #e5e7eb;border-top:0;border-radius:0 0 12px 12px;">
+                            <h2 style="color:#374151;margin:0 0 16px;">Senha alterada com sucesso</h2>
+                            <p>Olá, <strong>${safeName}</strong>.</p>
+                            <p>Sua senha do BioOrbit foi alterada com sucesso. Se você não realizou esta alteração, entre em contato com o suporte.</p>
+                        </div>
+                    </div>
+                </body>
+                </html>
+            `
+        });
+
+        console.log('Email de confirmação enviado com sucesso:', info.messageId);
+        return info;
+    } catch (error) {
+        console.error('Erro ao enviar confirmação via Gmail SMTP:', error.message);
+        return null;
+    }
+};
+
+const verifyTransporter = async () => {
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_APP_PASSWORD) {
+        throw new Error('Credenciais de email não configuradas');
+    }
+
+    return getTransporter().verify();
+};
+
+module.exports = {
+    sendPasswordResetEmail,
+    sendPasswordResetConfirmation,
+    verifyTransporter
+};
