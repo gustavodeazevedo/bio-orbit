@@ -1,7 +1,7 @@
 services:
   - type: web
     name: bioorbit-backend
-    env: node
+    runtime: node
     region: oregon
     plan: free
     rootDir: backend
@@ -11,14 +11,15 @@ services:
       - key: NODE_ENV
         value: production
       - key: MONGODB_URI
-        value: mongodb+srv://gustavodeazevedo2003:EliseteDaniKa4@biocalib.ybbb3or.mongodb.net/?retryWrites=true&w=majority&appName=biocalib
+        sync: false
       - key: JWT_SECRET
         generateValue: true
       - key: CORPORATE_TOKEN
-        value: BioKeyOne
+        sync: false
       - key: RESEND_API_KEY
-        value: re_3GG6rh3J_23meGpp6kNMNsy1p8TweB1V8
+        sync: false
       - key: RESEND_FROM_EMAIL
+        # A Resend restringe este remetente ao e-mail do titular da conta.
         value: bioorbit@resend.dev
       - key: FRONTEND_URL
         value: https://bio-orbit.vercel.app

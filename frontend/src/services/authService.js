@@ -97,6 +97,15 @@ const authService = {
         return response.data;
     },
 
+    // Excluir a conta do usuário autenticado
+    deleteAccount: async (senha) => {
+        const response = await api.delete('/usuarios/perfil', {
+            data: { senha },
+        });
+        authService.logout();
+        return response.data;
+    },
+
     // Verificar se o usuário está autenticado
     isAuthenticated: () => {
         return localStorage.getItem('userInfo') !== null;

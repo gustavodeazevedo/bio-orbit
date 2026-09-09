@@ -9,6 +9,7 @@ const {
     getUsuarioById,
     updateUsuario,
     deleteUsuario,
+    deleteMinhaConta,
     updateHeartbeat,
     setOffline,
     getUsuariosAtivos,
@@ -47,6 +48,11 @@ router.get('/perfil', protect, getUsuarioPerfil);
 // @desc    Update user profile
 // @access  Private
 router.put('/perfil', protect, updateUsuarioPerfil);
+
+// @route   DELETE /api/usuarios/perfil
+// @desc    Excluir a própria conta
+// @access  Private
+router.delete('/perfil', protect, deleteMinhaConta);
 
 // @route   POST /api/usuarios/heartbeat
 // @desc    Update user heartbeat (presence)

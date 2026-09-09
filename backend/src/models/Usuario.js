@@ -52,9 +52,9 @@ usuarioSchema.methods.matchPassword = async function (enteredPassword) {
 };
 
 // Middleware para criptografar a senha antes de salvar
-usuarioSchema.pre('save', async function (next) {
+usuarioSchema.pre('save', async function () {
     if (!this.isModified('senha')) {
-        next();
+        return;
     }
 
     const salt = await bcrypt.genSalt(10);

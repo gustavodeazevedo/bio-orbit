@@ -83,6 +83,21 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
+  // Excluir a conta autenticada e encerrar a sessão
+  const deleteAccount = async (senha) => {
+    try {
+      setError(null);
+      setLoading(true);
+      await authService.deleteAccount(senha);
+      setUser(null);
+    } catch (err) {
+      setError(err.response?.data?.message || "Erro ao excluir conta");
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Verificar se o usuário é admin
   const isAdmin = () => {
     return user?.isAdmin === true;
@@ -96,7 +111,7 @@ export const AuthProvider = ({ children }) => {
       return await authService.requestPasswordReset(email);
     } catch (err) {
       setError(
-        err.response?.data?.message || "Erro ao solicitar recuperação de senha"
+        err.response?.data?.message || "Erro ao solicitar recuperação de senha",
       );
       throw err;
     } finally {
@@ -126,6 +141,7 @@ export const AuthProvider = ({ children }) => {
     login,
     register,
     logout,
+    deleteAccount,
     isAdmin,
     requestPasswordReset,
     resetPassword,
