@@ -1,14 +1,20 @@
 const nodemailer = require('nodemailer');
 
+const getEmailUser = () => process.env.EMAIL_USER?.trim();
+
+const getAppPassword = () => process.env.EMAIL_APP_PASSWORD
+    ?.replace(/^['"]|['"]$/g, '')
+    .replace(/\s+/g, '');
+
 const getTransporter = () => nodemailer.createTransport({
     service: 'gmail',
     auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_APP_PASSWORD
+        user: getEmailUser(),
+        pass: getAppPassword()
     }
 });
 
-const getSender = () => `BioOrbit <${process.env.EMAIL_USER}>`;
+const getSender = () => `BioOrbit <${getEmailUser()}>`;
 
 const escapeHtml = (value = '') => String(value)
     .replace(/&/g, '&amp;')
@@ -18,7 +24,7 @@ const escapeHtml = (value = '') => String(value)
     .replace(/'/g, '&#039;');
 
 const sendMail = async ({ to, subject, html }) => {
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_APP_PASSWORD) {
+    if (!getEmailUser() || !getAppPassword()) {
         throw new Error('Credenciais de email não configuradas');
     }
 
@@ -76,7 +82,11 @@ const sendPasswordResetEmail = async (email, nome, resetUrl) => {
         console.log('Email de recuperação enviado com sucesso:', info.messageId);
         return info;
     } catch (error) {
-        console.error('Erro ao enviar email de recuperação via Gmail SMTP:', error.message);
+        console.error('Erro ao enviar email de recuperação via Gmail SMTP:', {
+            code: error.code,
+            responseCode: error.responseCode,
+            message: error.message
+        });
         throw new Error('Falha ao enviar email de recuperação', { cause: error });
     }
 };
@@ -114,13 +124,17 @@ const sendPasswordResetConfirmation = async (email, nome) => {
         console.log('Email de confirmação enviado com sucesso:', info.messageId);
         return info;
     } catch (error) {
-        console.error('Erro ao enviar confirmação via Gmail SMTP:', error.message);
+        console.error('Erro ao enviar confirmação via Gmail SMTP:', {
+            code: error.code,
+            responseCode: error.responseCode,
+            message: error.message
+        });
         return null;
     }
 };
 
 const verifyTransporter = async () => {
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_APP_PASSWORD) {
+    if (!getEmailUser() || !getAppPassword()) {
         throw new Error('Credenciais de email não configuradas');
     }
 

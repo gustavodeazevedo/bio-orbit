@@ -19,7 +19,7 @@ beforeEach(() => {
         verify: mockVerify
     }));
     process.env.EMAIL_USER = 'syngonium.br@gmail.com';
-    process.env.EMAIL_APP_PASSWORD = 'app-password-for-test';
+    process.env.EMAIL_APP_PASSWORD = 'app password for test';
     mockSendMail.mockResolvedValue({ messageId: 'email-id' });
     mockVerify.mockResolvedValue(true);
     jest.spyOn(console, 'log').mockImplementation(() => { });
@@ -43,7 +43,7 @@ test.each(['cadastro@example.net', 'novo-email@example.net'])(
             service: 'gmail',
             auth: {
                 user: 'syngonium.br@gmail.com',
-                pass: 'app-password-for-test'
+                pass: 'apppasswordfortest'
             }
         });
         expect(mockSendMail).toHaveBeenCalledWith(expect.objectContaining({
